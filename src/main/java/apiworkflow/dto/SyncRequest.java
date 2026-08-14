@@ -5,7 +5,9 @@ import java.io.Serializable;
 
 @Data
 public class SyncRequest implements Serializable {
+    private Integer swaggerMappingId;
     private String env;
+    private String appConfigId;
     private String appRealName;
     private String versionTag;
     private String swaggerUrl;

@@ -2,12 +2,13 @@ package apiworkflow.service.impl;
 
 import apiworkflow.entity.AppSwaggerMapping;
 import apiworkflow.entity.EndpointDefinition;
+import apiworkflow.entity.SwaggerSyncLog;
 import apiworkflow.mapper.AppSwaggerMappingMapper;
 import apiworkflow.mapper.EndpointDefinitionMapper;
+import apiworkflow.mapper.SwaggerSyncLogMapper;
 import apiworkflow.service.IBrickApiService;
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONArray;
-import com.alibaba.fastjson.JSONObject;
+import apiworkflow.swagger.ParsedSwaggerDocument;
+import apiworkflow.swagger.SwaggerDocumentParser;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -15,11 +16,11 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 public class BrickApiServiceImpl implements IBrickApiService {
@@ -29,6 +30,12 @@ public class BrickApiServiceImpl implements IBrickApiService {
 
     @Autowired
     private EndpointDefinitionMapper endpointDefinitionMapper;
+
+    @Autowired
+    private SwaggerSyncLogMapper swaggerSyncLogMapper;
+
+    @Autowired
+    private SwaggerDocumentParser swaggerDocumentParser;
 
     @Override
     public AppSwaggerMapping getById(Integer id) {
@@ -79,12 +86,9 @@ public class BrickApiServiceImpl implements IBrickApiService {
 
     @Override
     public boolean isValidSwaggerJson(String json) {
-        if (!StringUtils.hasText(json)) {
-            return false;
-        }
         try {
-            JSONObject root = JSON.parseObject(json);
-            return root.containsKey("swagger") || root.containsKey("openapi");
+            swaggerDocumentParser.parse(json, null, null);
+            return true;
         } catch (Exception e) {
             return false;
         }
@@ -93,77 +97,101 @@ public class BrickApiServiceImpl implements IBrickApiService {
     @Override
     public String validateSwaggerJsonDetailed(String json) {
         try {
-            JSONObject root = JSON.parseObject(json);
-            if (root.containsKey("swagger")) {
-                return "Swagger v2";
-            } else if (root.containsKey("openapi")) {
-                return "OpenAPI v3";
-            }
-            return "Unknown";
+            ParsedSwaggerDocument document = swaggerDocumentParser.parse(json, null, null);
+            String type = "v2".equals(document.getSwaggerVersion()) ? "Swagger v2" : "OpenAPI v3";
+            return type + " (" + document.getEndpoints().size() + " endpoints)";
         } catch (Exception e) {
-            return "Invalid JSON";
+            return "Invalid: " + e.getMessage();
         }
     }
 
     @Override
+    @Transactional
     public int syncEndpointDefinitionsBySwaggerMappingId(
             Integer swaggerMappingId, String apiDocsJson, String operator,
             String customHost, String customBasePath) {
-
+        Date startTime = new Date();
         AppSwaggerMapping mapping = swaggerMappingMapper.selectById(swaggerMappingId);
         if (mapping == null) {
             throw new RuntimeException("Swagger mapping not found: " + swaggerMappingId);
         }
 
-        JSONObject root = JSON.parseObject(apiDocsJson);
-        String swaggerVersion = root.containsKey("swagger") ? "v2" : "v3";
+        String syncOperator = StringUtils.hasText(operator) ? operator : "system";
+        ParsedSwaggerDocument document = swaggerDocumentParser.parse(apiDocsJson, customHost, customBasePath);
+        List<EndpointDefinition> incoming = document.getEndpoints();
+        List<EndpointDefinition> existing = endpointDefinitionMapper
+                .selectAllBySwaggerMappingIdIncludingDeleted(swaggerMappingId);
 
-        List<EndpointDefinition> endpoints = new ArrayList<>();
-        JSONObject paths = root.getJSONObject("paths");
-        if (paths != null) {
-            for (Map.Entry<String, Object> pathEntry : paths.entrySet()) {
-                String path = pathEntry.getKey();
-                JSONObject pathItem = paths.getJSONObject(path);
-                if (pathItem == null) continue;
-
-                Set<String> methods = new HashSet<>();
-                methods.add("get"); methods.add("post"); methods.add("put"); methods.add("delete");
-                methods.add("patch"); methods.add("head"); methods.add("options");
-
-                for (String method : methods) {
-                    if (pathItem.containsKey(method)) {
-                        JSONObject operation = pathItem.getJSONObject(method);
-                        EndpointDefinition endpoint = new EndpointDefinition();
-                        endpoint.setEnv(mapping.getEnv());
-                        endpoint.setSwaggerMappingId(swaggerMappingId);
-                        endpoint.setAppConfigId(mapping.getAppConfigId());
-                        endpoint.setProtocol("http");
-                        endpoint.setHost(customHost != null ? customHost : "");
-                        endpoint.setBasePath(customBasePath != null ? customBasePath : "");
-                        endpoint.setEndpointPath(path);
-                        endpoint.setHttpMethod(method.toUpperCase());
-                        endpoint.setOperationId(operation.getString("operationId"));
-                        endpoint.setSummary(operation.getString("summary"));
-                        endpoint.setDescription(operation.getString("description"));
-                        endpoint.setDeprecated(operation.getInteger("deprecated") != null ? 1 : 0);
-                        endpoint.setSwaggerVersion(swaggerVersion);
-
-                        JSONArray tags = operation.getJSONArray("tags");
-                        if (tags != null) {
-                            endpoint.setTags(tags.toString());
-                        }
-
-                        endpoints.add(endpoint);
-                    }
-                }
+        Map<String, EndpointDefinition> existingByKey = new HashMap<>();
+        int interfacesBefore = 0;
+        for (EndpointDefinition endpoint : existing) {
+            if (Integer.valueOf(0).equals(endpoint.getIsDeleted())) {
+                interfacesBefore++;
+            }
+            String key = endpointKey(endpoint);
+            EndpointDefinition current = existingByKey.get(key);
+            if (current == null || (!Integer.valueOf(0).equals(current.getIsDeleted())
+                    && Integer.valueOf(0).equals(endpoint.getIsDeleted()))) {
+                existingByKey.put(key, endpoint);
             }
         }
 
-        if (!endpoints.isEmpty()) {
-            endpointDefinitionMapper.batchInsert(endpoints);
+        Set<String> incomingKeys = new HashSet<>();
+        int interfacesAdded = 0;
+        int interfacesUpdated = 0;
+        for (EndpointDefinition endpoint : incoming) {
+            endpoint.setEnv(mapping.getEnv());
+            endpoint.setSwaggerMappingId(swaggerMappingId);
+            endpoint.setAppConfigId(mapping.getAppConfigId());
+            endpoint.setSwaggerUrl(mapping.getSwaggerUrl());
+            endpoint.setCreateBy(syncOperator);
+            endpoint.setUpdateBy(syncOperator);
+            endpoint.setIsDeleted(0);
+
+            String key = endpointKey(endpoint);
+            incomingKeys.add(key);
+            EndpointDefinition old = existingByKey.get(key);
+            if (old == null || !Integer.valueOf(0).equals(old.getIsDeleted())) {
+                interfacesAdded++;
+            } else if (!Objects.equals(old.getDocChecksum(), endpoint.getDocChecksum())) {
+                interfacesUpdated++;
+            }
         }
 
-        return endpoints.size();
+        int interfacesDeleted = 0;
+        for (EndpointDefinition endpoint : existing) {
+            if (Integer.valueOf(0).equals(endpoint.getIsDeleted())
+                    && !incomingKeys.contains(endpointKey(endpoint))) {
+                interfacesDeleted++;
+            }
+        }
+
+        endpointDefinitionMapper.markDeletedBySwaggerMappingId(swaggerMappingId, syncOperator);
+        if (!incoming.isEmpty()) {
+            endpointDefinitionMapper.batchUpsert(incoming);
+        }
+
+        Date endTime = new Date();
+        SwaggerSyncLog syncLog = new SwaggerSyncLog();
+        syncLog.setSwaggerMappingId(swaggerMappingId);
+        syncLog.setSyncType("manual");
+        syncLog.setSyncStatus("success");
+        syncLog.setStartTime(startTime);
+        syncLog.setEndTime(endTime);
+        syncLog.setDurationMs(endTime.getTime() - startTime.getTime());
+        syncLog.setInterfacesBefore(interfacesBefore);
+        syncLog.setInterfacesAfter(incoming.size());
+        syncLog.setInterfacesAdded(interfacesAdded);
+        syncLog.setInterfacesUpdated(interfacesUpdated);
+        syncLog.setInterfacesDeleted(interfacesDeleted);
+        syncLog.setCreateBy(syncOperator);
+        swaggerSyncLogMapper.insert(syncLog);
+
+        return incoming.size();
+    }
+
+    private String endpointKey(EndpointDefinition endpoint) {
+        return endpoint.getHttpMethod() + " " + endpoint.getEndpointPath();
     }
 
     @Override

@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS brick_app_swagger_mapping (
     version_tag VARCHAR(100),
     branch_name VARCHAR(200),
     project_url VARCHAR(500),
-    is_deleted TINYINT DEFAULT 0,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
     coverage_rate DECIMAL(5,2),
     coverage_rate_numerator DECIMAL(10,2),
     coverage_rate_denominator DECIMAL(10,2),
@@ -56,12 +56,12 @@ CREATE TABLE IF NOT EXISTS brick_endpoint_definition (
     swagger_url VARCHAR(500),
     doc_checksum VARCHAR(100),
     is_lightweight TINYINT DEFAULT 0,
-    is_deleted TINYINT DEFAULT 0,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
     create_by VARCHAR(50),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_by VARCHAR(50),
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_swagger_method_path (swagger_mapping_id, http_method, endpoint_path, is_deleted),
+    UNIQUE KEY uk_swagger_method_path (swagger_mapping_id, http_method, endpoint_path),
     INDEX idx_swagger_mapping (swagger_mapping_id),
     INDEX idx_env_app (env, app_config_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

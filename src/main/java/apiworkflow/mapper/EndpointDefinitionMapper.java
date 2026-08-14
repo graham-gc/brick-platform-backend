@@ -39,7 +39,11 @@ public interface EndpointDefinitionMapper {
 
     List<EndpointDefinition> selectAllBySwaggerMappingId(@Param("swaggerMappingId") Integer swaggerMappingId, @Param("isDeleted") Integer isDeleted);
 
+    List<EndpointDefinition> selectAllBySwaggerMappingIdIncludingDeleted(@Param("swaggerMappingId") Integer swaggerMappingId);
+
     int batchInsert(@Param("list") List<EndpointDefinition> list);
+
+    int batchUpsert(@Param("list") List<EndpointDefinition> list);
 
     int batchUpdate(@Param("list") List<EndpointDefinition> list);
 

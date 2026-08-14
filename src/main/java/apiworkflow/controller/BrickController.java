@@ -92,8 +92,10 @@ public class BrickController {
 
     @PostMapping("/sync")
     public ApiResponse<Map<String, Object>> sync(@RequestBody SyncRequest request) {
-        AppSwaggerMapping mapping = apiService.getByEnvAppConfigAndVersion(
-                request.getEnv(), null, request.getVersionTag());
+        AppSwaggerMapping mapping = request.getSwaggerMappingId() == null
+                ? apiService.getByEnvAppConfigAndVersion(
+                        request.getEnv(), request.getAppConfigId(), request.getVersionTag())
+                : apiService.getById(request.getSwaggerMappingId());
 
         if (mapping == null) {
             return ApiResponse.error("Swagger mapping not found");

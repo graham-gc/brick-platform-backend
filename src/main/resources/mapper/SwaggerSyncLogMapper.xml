@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.SwaggerSyncLogMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_swagger_sync_log (
+            swagger_mapping_id, sync_type, sync_status, start_time, end_time,
+            duration_ms, interfaces_before, interfaces_after, interfaces_added,
+            interfaces_updated, interfaces_deleted, git_merge_branches,
+            create_by, create_time
+        ) VALUES (
+            #{swaggerMappingId}, #{syncType}, #{syncStatus}, #{startTime}, #{endTime},
+            #{durationMs}, #{interfacesBefore}, #{interfacesAfter}, #{interfacesAdded},
+            #{interfacesUpdated}, #{interfacesDeleted}, #{gitMergeBranches},
+            #{createBy}, NOW()
+        )
+    </insert>
+
+</mapper>

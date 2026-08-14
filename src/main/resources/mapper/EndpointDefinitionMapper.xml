@@ -60,6 +60,20 @@
         WHERE swagger_mapping_id = #{swaggerMappingId} AND is_deleted = #{isDeleted}
     </select>
 
+    <select id="selectAllBySwaggerMappingIdIncludingDeleted" resultMap="BaseResultMap">
+        SELECT * FROM brick_endpoint_definition
+        WHERE swagger_mapping_id = #{swaggerMappingId}
+    </select>
+
+    <select id="countBySwaggerMappingId" resultType="int">
+        SELECT COUNT(*) FROM brick_endpoint_definition
+        WHERE swagger_mapping_id = #{swaggerMappingId} AND is_deleted = #{isDeleted}
+        <if test="httpMethod != null and httpMethod != ''">AND http_method = #{httpMethod}</if>
+        <if test="keyword != null and keyword != ''">
+            AND (endpoint_path LIKE CONCAT('%', #{keyword}, '%') OR summary LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+    </select>
+
     <select id="batchEndpointStats" resultType="map">
         SELECT
             swagger_mapping_id,
@@ -128,6 +142,46 @@
                 #{item.swaggerUrl}, #{item.docChecksum}, #{item.isLightweight}, #{item.isDeleted}, #{item.createBy}, NOW()
             )
         </foreach>
+    </insert>
+
+    <insert id="batchUpsert">
+        INSERT INTO brick_endpoint_definition (
+            env, swagger_mapping_id, app_config_id, protocol, host, base_path,
+            endpoint_path, full_url, http_method, operation_id, summary, description,
+            tags, deprecated, swagger_version, consumes_types, produces_types,
+            swagger_url, doc_checksum, is_lightweight, is_deleted,
+            create_by, update_by, create_time, update_time
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.env}, #{item.swaggerMappingId}, #{item.appConfigId}, #{item.protocol}, #{item.host}, #{item.basePath},
+                #{item.endpointPath}, #{item.fullUrl}, #{item.httpMethod}, #{item.operationId}, #{item.summary}, #{item.description},
+                #{item.tags}, #{item.deprecated}, #{item.swaggerVersion}, #{item.consumesTypes}, #{item.producesTypes},
+                #{item.swaggerUrl}, #{item.docChecksum}, #{item.isLightweight}, 0,
+                #{item.createBy}, #{item.updateBy}, NOW(), NOW()
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            env = VALUES(env),
+            app_config_id = VALUES(app_config_id),
+            protocol = VALUES(protocol),
+            host = VALUES(host),
+            base_path = VALUES(base_path),
+            full_url = VALUES(full_url),
+            operation_id = VALUES(operation_id),
+            summary = VALUES(summary),
+            description = VALUES(description),
+            tags = VALUES(tags),
+            deprecated = VALUES(deprecated),
+            swagger_version = VALUES(swagger_version),
+            consumes_types = VALUES(consumes_types),
+            produces_types = VALUES(produces_types),
+            swagger_url = VALUES(swagger_url),
+            doc_checksum = VALUES(doc_checksum),
+            is_lightweight = VALUES(is_lightweight),
+            is_deleted = 0,
+            update_by = VALUES(update_by),
+            update_time = NOW()
     </insert>
 
     <update id="updateById">
