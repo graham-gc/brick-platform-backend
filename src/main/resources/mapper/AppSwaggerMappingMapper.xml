@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.AppSwaggerMappingMapper">
+
+    <resultMap id="BaseResultMap" type="apiworkflow.entity.AppSwaggerMapping">
+        <id column="id" property="id"/>
+        <result column="app_name" property="appName"/>
+        <result column="app_config_id" property="appConfigId"/>
+        <result column="real_name" property="realName"/>
+        <result column="swagger_url" property="swaggerUrl"/>
+        <result column="env" property="env"/>
+        <result column="active" property="active"/>
+        <result column="owner" property="owner"/>
+        <result column="ext_json" property="extJson"/>
+        <result column="version_tag" property="versionTag"/>
+        <result column="branch_name" property="branchName"/>
+        <result column="project_url" property="projectUrl"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="coverage_rate" property="coverageRate"/>
+        <result column="coverage_rate_numerator" property="coverageRateNumerator"/>
+        <result column="coverage_rate_denominator" property="coverageRateDenominator"/>
+        <result column="last_30_days_coverage_rate" property="last30DaysCoverageRate"/>
+        <result column="coverage_rate_type" property="coverageRateType"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM brick_app_swagger_mapping WHERE id = #{id}
+    </select>
+
+    <select id="selectByEnvAndAppConfigId" resultMap="BaseResultMap">
+        SELECT * FROM brick_app_swagger_mapping
+        WHERE env = #{env} AND app_config_id = #{appConfigId} AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectByEnvAppConfigAndVersion" resultMap="BaseResultMap">
+        SELECT * FROM brick_app_swagger_mapping
+        WHERE env = #{env} AND app_config_id = #{appConfigId} AND version_tag = #{versionTag} AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="selectVersionsByEnvAndAppConfig" resultMap="BaseResultMap">
+        SELECT * FROM brick_app_swagger_mapping
+        WHERE env = #{env} AND app_config_id = #{appConfigId} AND is_deleted = 0
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT * FROM brick_app_swagger_mapping WHERE is_deleted = 0
+        <if test="query.env != null">AND env = #{query.env}</if>
+        <if test="query.appConfigId != null">AND app_config_id = #{query.appConfigId}</if>
+        <if test="query.versionTag != null">AND version_tag = #{query.versionTag}</if>
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_app_swagger_mapping (
+            app_name, app_config_id, real_name, swagger_url, env, active, owner,
+            ext_json, version_tag, branch_name, project_url, coverage_rate,
+            coverage_rate_numerator, coverage_rate_denominator, coverage_rate_type,
+            create_by, create_time
+        ) VALUES (
+            #{appName}, #{appConfigId}, #{realName}, #{swaggerUrl}, #{env}, #{active}, #{owner},
+            #{extJson}, #{versionTag}, #{branchName}, #{projectUrl}, #{coverageRate},
+            #{coverageRateNumerator}, #{coverageRateDenominator}, #{coverageRateType},
+            #{createBy}, NOW()
+        )
+    </insert>
+
+    <update id="updateById">
+        UPDATE brick_app_swagger_mapping SET
+            app_name = #{appName},
+            app_config_id = #{appConfigId},
+            real_name = #{realName},
+            swagger_url = #{swaggerUrl},
+            env = #{env},
+            active = #{active},
+            owner = #{owner},
+            ext_json = #{extJson},
+            version_tag = #{versionTag},
+            branch_name = #{branchName},
+            project_url = #{projectUrl},
+            coverage_rate = #{coverageRate},
+            coverage_rate_numerator = #{coverageRateNumerator},
+            coverage_rate_denominator = #{coverageRateDenominator},
+            coverage_rate_type = #{coverageRateType},
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="softDeleteById">
+        UPDATE brick_app_swagger_mapping SET is_deleted = 1, update_by = #{updateBy}, update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+</mapper>

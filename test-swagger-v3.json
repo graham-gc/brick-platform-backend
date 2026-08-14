@@ -1,0 +1,706 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Brick Platform OpenAPI 3.0 Test",
+    "description": "Brick Interface Automation Testing Platform",
+    "version": "1.0.0",
+    "contact": {
+      "name": "API Support",
+      "email": "support@example.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.example.com/v1",
+      "description": "Production Server"
+    },
+    {
+      "url": "https://uat-api.example.com/v1",
+      "description": "UAT Server"
+    },
+    {
+      "url": "http://localhost:8080/v1",
+      "description": "Local Development"
+    }
+  ],
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "Get user list",
+        "description": "Paginated query of users with keyword search",
+        "operationId": "getUserList",
+        "tags": ["User Management"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number",
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Page size",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "Search keyword",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "User status filter",
+            "schema": {
+              "type": "string",
+              "enum": ["active", "inactive", "banned"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserListResponse"
+                },
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "total": 100,
+                    "page": 1,
+                    "pageSize": 10,
+                    "list": [
+                      {
+                        "id": 1,
+                        "username": "zhangsan",
+                        "email": "zhangsan@example.com",
+                        "status": "active"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create user",
+        "description": "Create a new user",
+        "operationId": "createUser",
+        "tags": ["User Management"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreate"
+              },
+              "example": {
+                "username": "lisi",
+                "password": "123456",
+                "email": "lisi@example.com",
+                "phone": "13800138000"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "summary": "Get user detail",
+        "description": "Get user detail by ID",
+        "operationId": "getUserById",
+        "tags": ["User Management"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update user",
+        "description": "Update user information",
+        "operationId": "updateUser",
+        "tags": ["User Management"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete user",
+        "description": "Delete user by ID",
+        "operationId": "deleteUser",
+        "tags": ["User Management"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "User login",
+        "description": "Username and password login to get token",
+        "operationId": "login",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "example": "admin"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "123456"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "User logout",
+        "operationId": "logout",
+        "tags": ["Authentication"],
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          }
+        }
+      }
+    },
+    "/orders": {
+      "get": {
+        "summary": "Get order list",
+        "description": "Query all orders of user",
+        "operationId": "getOrderList",
+        "tags": ["Order Management"],
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Order status",
+            "schema": {
+              "type": "string",
+              "enum": ["pending", "paid", "shipped", "completed", "cancelled"]
+            }
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Start date",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "End date",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create order",
+        "description": "Create a new order",
+        "operationId": "createOrder",
+        "tags": ["Order Management"],
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{id}": {
+      "get": {
+        "summary": "Get order detail",
+        "operationId": "getOrderById",
+        "tags": ["Order Management"],
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products/{id}/stock": {
+      "get": {
+        "summary": "Get product stock",
+        "description": "Query stock quantity of product",
+        "operationId": "getProductStock",
+        "tags": ["Product Management"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "productId": {"type": "integer"},
+                    "stock": {"type": "integer"},
+                    "reserved": {"type": "integer"},
+                    "available": {"type": "integer"}
+                  }
+                },
+                "example": {
+                  "productId": 1001,
+                  "stock": 1000,
+                  "reserved": 50,
+                  "available": 950
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/upload": {
+      "post": {
+        "summary": "File upload",
+        "description": "Upload file to server",
+        "operationId": "uploadFile",
+        "tags": ["File Management"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "File to upload"
+                  },
+                  "folder": {
+                    "type": "string",
+                    "description": "Target folder path"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileUploadResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT Token authentication"
+      },
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API Key authentication"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer", "description": "User ID"},
+          "username": {"type": "string", "description": "Username"},
+          "email": {"type": "string", "format": "email", "description": "Email"},
+          "phone": {"type": "string", "description": "Phone number"},
+          "avatar": {"type": "string", "format": "uri", "description": "Avatar URL"},
+          "status": {"type": "string", "enum": ["active", "inactive", "banned"]},
+          "roles": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "createTime": {"type": "string", "format": "date-time"},
+          "updateTime": {"type": "string", "format": "date-time"}
+        }
+      },
+      "UserCreate": {
+        "type": "object",
+        "required": ["username", "password", "email"],
+        "properties": {
+          "username": {"type": "string", "minLength": 3, "maxLength": 50},
+          "password": {"type": "string", "minLength": 6, "format": "password"},
+          "email": {"type": "string", "format": "email"},
+          "phone": {"type": "string"},
+          "role": {"type": "string", "default": "user"}
+        }
+      },
+      "UserUpdate": {
+        "type": "object",
+        "properties": {
+          "email": {"type": "string", "format": "email"},
+          "phone": {"type": "string"},
+          "status": {"type": "string", "enum": ["active", "inactive"]}
+        }
+      },
+      "UserListResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "total": {"type": "integer"},
+              "page": {"type": "integer"},
+              "pageSize": {"type": "integer"},
+              "list": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/User"}
+              }
+            }
+          }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "orderNo": {"type": "string", "description": "Order number"},
+          "userId": {"type": "integer"},
+          "totalAmount": {"type": "number", "format": "decimal"},
+          "status": {"type": "string"},
+          "items": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/OrderItem"}
+          },
+          "createTime": {"type": "string", "format": "date-time"}
+        }
+      },
+      "OrderItem": {
+        "type": "object",
+        "properties": {
+          "productId": {"type": "integer"},
+          "productName": {"type": "string"},
+          "quantity": {"type": "integer"},
+          "price": {"type": "number", "format": "decimal"}
+        }
+      },
+      "OrderCreate": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {"type": "integer"},
+                "quantity": {"type": "integer", "minimum": 1}
+              }
+            }
+          },
+          "remark": {"type": "string"}
+        }
+      },
+      "OrderListResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "data": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/Order"}
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer", "example": 200},
+          "data": {
+            "type": "object",
+            "properties": {
+              "token": {"type": "string", "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."},
+              "refreshToken": {"type": "string"},
+              "expiresIn": {"type": "integer", "example": 7200},
+              "user": {"$ref": "#/components/schemas/User"}
+            }
+          }
+        }
+      },
+      "ApiResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer", "example": 200},
+          "message": {"type": "string", "example": "success"},
+          "data": {"type": "object"}
+        }
+      },
+      "FileUploadResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "fileId": {"type": "string"},
+              "fileName": {"type": "string"},
+              "fileUrl": {"type": "string", "format": "uri"},
+              "fileSize": {"type": "integer"}
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "detail": {"type": "string"}
+        }
+      }
+    },
+    "responses": {
+      "Success": {
+        "description": "Success",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiResponse"
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/Error"}
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Unauthorized",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/Error"}
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/Error"}
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {"name": "User Management", "description": "User related endpoints"},
+    {"name": "Authentication", "description": "Login and logout endpoints"},
+    {"name": "Order Management", "description": "Order related endpoints"},
+    {"name": "Product Management", "description": "Product related endpoints"},
+    {"name": "File Management", "description": "File upload and download"}
+  ]
+}

@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.BrickFlowNodeMapper">
+
+    <resultMap id="BaseResultMap" type="apiworkflow.entity.BrickFlowNode">
+        <id column="id" property="id"/>
+        <result column="flow_id" property="flowId"/>
+        <result column="endpoint_id" property="endpointId"/>
+        <result column="timeout_sec" property="timeoutSec"/>
+        <result column="retries" property="retries"/>
+        <result column="headers_json" property="headersJson"/>
+        <result column="payload_json" property="payloadJson"/>
+        <result column="query_params_json" property="queryParamsJson"/>
+        <result column="path_vars_json" property="pathVarsJson"/>
+        <result column="condition_group_id" property="conditionGroupId"/>
+        <result column="token_config_id" property="tokenConfigId"/>
+        <result column="sign_config_id" property="signConfigId"/>
+        <result column="sign_enabled" property="signEnabled"/>
+        <result column="node_type" property="nodeType"/>
+        <result column="grpc_endpoint_id" property="grpcEndpointId"/>
+        <result column="grpc_discovery_config" property="grpcDiscoveryConfig"/>
+        <result column="x" property="x"/>
+        <result column="y" property="y"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="endpoint_app_config_id" property="endpointAppConfigId"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM brick_flow_node WHERE id = #{id}
+    </select>
+
+    <select id="selectByFlowId" resultMap="BaseResultMap">
+        SELECT * FROM brick_flow_node WHERE flow_id = #{flowId} AND is_deleted = 0
+    </select>
+
+    <select id="selectByFlowIds" resultMap="BaseResultMap">
+        SELECT * FROM brick_flow_node WHERE flow_id IN
+        <foreach collection="flowIds" item="flowId" open="(" separator="," close=")">
+            #{flowId}
+        </foreach>
+        AND is_deleted = 0
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_flow_node (
+            flow_id, endpoint_id, timeout_sec, retries, headers_json, payload_json,
+            query_params_json, path_vars_json, condition_group_id, token_config_id,
+            sign_config_id, sign_enabled, node_type, grpc_endpoint_id, grpc_discovery_config,
+            x, y, is_deleted, endpoint_app_config_id, create_by, create_time
+        ) VALUES (
+            #{flowId}, #{endpointId}, #{timeoutSec}, #{retries}, #{headersJson}, #{payloadJson},
+            #{queryParamsJson}, #{pathVarsJson}, #{conditionGroupId}, #{tokenConfigId},
+            #{signConfigId}, #{signEnabled}, #{nodeType}, #{grpcEndpointId}, #{grpcDiscoveryConfig},
+            #{x}, #{y}, #{isDeleted}, #{endpointAppConfigId}, #{createBy}, NOW()
+        )
+    </insert>
+
+    <insert id="batchInsert">
+        INSERT INTO brick_flow_node (
+            flow_id, endpoint_id, timeout_sec, retries, headers_json, payload_json,
+            query_params_json, path_vars_json, condition_group_id, token_config_id,
+            sign_config_id, sign_enabled, node_type, grpc_endpoint_id, grpc_discovery_config,
+            x, y, is_deleted, endpoint_app_config_id, create_by, create_time
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.flowId}, #{item.endpointId}, #{item.timeoutSec}, #{item.retries},
+                #{item.headersJson}, #{item.payloadJson}, #{item.queryParamsJson}, #{item.pathVarsJson},
+                #{item.conditionGroupId}, #{item.tokenConfigId}, #{item.signConfigId}, #{item.signEnabled},
+                #{item.nodeType}, #{item.grpcEndpointId}, #{item.grpcDiscoveryConfig},
+                #{item.x}, #{item.y}, #{item.isDeleted}, #{item.endpointAppConfigId},
+                #{item.createBy}, NOW()
+            )
+        </foreach>
+    </insert>
+
+    <update id="updateById">
+        UPDATE brick_flow_node SET
+            endpoint_id = #{endpointId},
+            timeout_sec = #{timeoutSec},
+            retries = #{retries},
+            headers_json = #{headersJson},
+            payload_json = #{payloadJson},
+            query_params_json = #{queryParamsJson},
+            path_vars_json = #{pathVarsJson},
+            condition_group_id = #{conditionGroupId},
+            token_config_id = #{tokenConfigId},
+            sign_config_id = #{signConfigId},
+            sign_enabled = #{signEnabled},
+            node_type = #{nodeType},
+            grpc_endpoint_id = #{grpcEndpointId},
+            grpc_discovery_config = #{grpcDiscoveryConfig},
+            x = #{x},
+            y = #{y},
+            endpoint_app_config_id = #{endpointAppConfigId},
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="deleteByFlowId">
+        UPDATE brick_flow_node SET is_deleted = 1, update_time = NOW()
+        WHERE flow_id = #{flowId}
+    </update>
+
+</mapper>

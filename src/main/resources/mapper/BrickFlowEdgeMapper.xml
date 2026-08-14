@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.BrickFlowEdgeMapper">
+
+    <resultMap id="BaseResultMap" type="apiworkflow.entity.BrickFlowEdge">
+        <id column="id" property="id"/>
+        <result column="flow_id" property="flowId"/>
+        <result column="source_node_id" property="sourceNodeId"/>
+        <result column="target_node_id" property="targetNodeId"/>
+        <result column="edge_type" property="edgeType"/>
+        <result column="condition_json" property="conditionJson"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM brick_flow_edge WHERE id = #{id}
+    </select>
+
+    <select id="selectByFlowId" resultMap="BaseResultMap">
+        SELECT * FROM brick_flow_edge WHERE flow_id = #{flowId} AND is_deleted = 0
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_flow_edge (
+            flow_id, source_node_id, target_node_id, edge_type, condition_json,
+            is_deleted, create_by, create_time
+        ) VALUES (
+            #{flowId}, #{sourceNodeId}, #{targetNodeId}, #{edgeType}, #{conditionJson},
+            #{isDeleted}, #{createBy}, NOW()
+        )
+    </insert>
+
+    <insert id="batchInsert">
+        INSERT INTO brick_flow_edge (
+            flow_id, source_node_id, target_node_id, edge_type, condition_json,
+            is_deleted, create_by, create_time
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.flowId}, #{item.sourceNodeId}, #{item.targetNodeId},
+                #{item.edgeType}, #{item.conditionJson}, #{item.isDeleted},
+                #{item.createBy}, NOW()
+            )
+        </foreach>
+    </insert>
+
+    <update id="updateById">
+        UPDATE brick_flow_edge SET
+            source_node_id = #{sourceNodeId},
+            target_node_id = #{targetNodeId},
+            edge_type = #{edgeType},
+            condition_json = #{conditionJson},
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="deleteByFlowId">
+        UPDATE brick_flow_edge SET is_deleted = 1, update_time = NOW()
+        WHERE flow_id = #{flowId}
+    </update>
+
+</mapper>

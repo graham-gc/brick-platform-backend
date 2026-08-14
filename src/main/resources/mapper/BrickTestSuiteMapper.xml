@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.BrickTestSuiteMapper">
+
+    <resultMap id="BaseResultMap" type="apiworkflow.entity.BrickTestSuite">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="env" property="env"/>
+        <result column="swagger_mapping_id" property="swaggerMappingId"/>
+        <result column="app_config_id" property="appConfigId"/>
+        <result column="description" property="description"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM brick_test_suite WHERE id = #{id} AND is_deleted = 0
+    </select>
+
+    <select id="selectBySwaggerMappingId" resultMap="BaseResultMap">
+        SELECT * FROM brick_test_suite
+        WHERE swagger_mapping_id = #{swaggerMappingId} AND is_deleted = 0
+        <if test="keyword != null">AND name LIKE CONCAT('%', #{keyword}, '%')</if>
+        ORDER BY update_time DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_test_suite (
+            name, env, swagger_mapping_id, app_config_id, description, is_deleted, create_by, create_time
+        ) VALUES (
+            #{name}, #{env}, #{swaggerMappingId}, #{appConfigId}, #{description}, #{isDeleted}, #{createBy}, NOW()
+        )
+    </insert>
+
+    <update id="updateById">
+        UPDATE brick_test_suite SET
+            name = #{name},
+            env = #{env},
+            swagger_mapping_id = #{swaggerMappingId},
+            app_config_id = #{appConfigId},
+            description = #{description},
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="softDeleteById">
+        UPDATE brick_test_suite SET is_deleted = 1, update_by = #{updateBy}, update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+</mapper>

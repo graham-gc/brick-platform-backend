@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.BrickFlowRunNodeMapper">
+
+    <resultMap id="BaseResultMap" type="apiworkflow.entity.BrickFlowRunNode">
+        <id column="id" property="id"/>
+        <result column="run_id" property="runId"/>
+        <result column="node_id" property="nodeId"/>
+        <result column="endpoint_id" property="endpointId"/>
+        <result column="grpc_endpoint_id" property="grpcEndpointId"/>
+        <result column="status" property="status"/>
+        <result column="http_status" property="httpStatus"/>
+        <result column="duration_ms" property="durationMs"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="request_method" property="requestMethod"/>
+        <result column="request_url" property="requestUrl"/>
+        <result column="request_headers" property="requestHeaders"/>
+        <result column="request_body" property="requestBody"/>
+        <result column="request_query_params" property="requestQueryParams"/>
+        <result column="request_path_params" property="requestPathParams"/>
+        <result column="response_headers" property="responseHeaders"/>
+        <result column="response_preview" property="responsePreview"/>
+        <result column="full_response" property="fullResponse"/>
+        <result column="response_size" property="responseSize"/>
+        <result column="error_msg" property="errorMsg"/>
+        <result column="assertion_total_count" property="assertionTotalCount"/>
+        <result column="assertion_passed_count" property="assertionPassedCount"/>
+        <result column="assertion_failed_count" property="assertionFailedCount"/>
+        <result column="assertion_summary" property="assertionSummary"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM brick_flow_run_node WHERE id = #{id}
+    </select>
+
+    <select id="selectByRunId" resultMap="BaseResultMap">
+        SELECT * FROM brick_flow_run_node WHERE run_id = #{runId} ORDER BY start_time
+    </select>
+
+    <select id="selectByRunIdAndNodeId" resultMap="BaseResultMap">
+        SELECT * FROM brick_flow_run_node WHERE run_id = #{runId} AND node_id = #{nodeId}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_flow_run_node (
+            run_id, node_id, endpoint_id, grpc_endpoint_id, status, http_status,
+            duration_ms, start_time, request_method, request_url, request_headers,
+            request_body, request_query_params, request_path_params, response_headers,
+            response_preview, full_response, response_size, error_msg,
+            assertion_total_count, assertion_passed_count, assertion_failed_count, assertion_summary
+        ) VALUES (
+            #{runId}, #{nodeId}, #{endpointId}, #{grpcEndpointId}, #{status}, #{httpStatus},
+            #{durationMs}, #{startTime}, #{requestMethod}, #{requestUrl}, #{requestHeaders},
+            #{requestBody}, #{requestQueryParams}, #{requestPathParams}, #{responseHeaders},
+            #{responsePreview}, #{fullResponse}, #{responseSize}, #{errorMsg},
+            #{assertionTotalCount}, #{assertionPassedCount}, #{assertionFailedCount}, #{assertionSummary}
+        )
+    </insert>
+
+    <update id="updateById">
+        UPDATE brick_flow_run_node SET
+            status = #{status},
+            http_status = #{httpStatus},
+            duration_ms = #{durationMs},
+            end_time = #{endTime},
+            response_headers = #{responseHeaders},
+            response_preview = #{responsePreview},
+            full_response = #{fullResponse},
+            response_size = #{responseSize},
+            error_msg = #{errorMsg},
+            assertion_total_count = #{assertionTotalCount},
+            assertion_passed_count = #{assertionPassedCount},
+            assertion_failed_count = #{assertionFailedCount},
+            assertion_summary = #{assertionSummary}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE brick_flow_run_node SET
+            status = #{status},
+            duration_ms = #{durationMs},
+            error_msg = #{errorMsg}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

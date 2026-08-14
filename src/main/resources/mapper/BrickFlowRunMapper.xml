@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.BrickFlowRunMapper">
+
+    <resultMap id="BaseResultMap" type="apiworkflow.entity.BrickFlowRun">
+        <id column="id" property="id"/>
+        <result column="flow_id" property="flowId"/>
+        <result column="status" property="status"/>
+        <result column="triggered_by" property="triggeredBy"/>
+        <result column="run_type" property="runType"/>
+        <result column="duration_ms" property="durationMs"/>
+        <result column="error_msg" property="errorMsg"/>
+        <result column="override_base_url" property="overrideBaseUrl"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="suite_run_id" property="suiteRunId"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM brick_flow_run WHERE id = #{id}
+    </select>
+
+    <select id="selectByFlowId" resultMap="BaseResultMap">
+        SELECT * FROM brick_flow_run WHERE flow_id = #{flowId} ORDER BY create_time DESC
+    </select>
+
+    <select id="selectRunsBySwaggerMappingId" resultType="map">
+        SELECT r.*, f.name as flow_name
+        FROM brick_flow_run r
+        INNER JOIN brick_flow f ON r.flow_id = f.id
+        WHERE f.swagger_mapping_id = #{swaggerMappingId} AND f.is_deleted = 0
+        <if test="flowName != null">AND f.name LIKE CONCAT('%', #{flowName}, '%')</if>
+        <if test="status != null">AND r.status = #{status}</if>
+        <if test="startDate != null">AND r.start_time &gt;= #{startDate}</if>
+        <if test="endDate != null">AND r.start_time &lt;= #{endDate}</if>
+        <if test="testSuiteRunId != null">AND r.suite_run_id = #{testSuiteRunId}</if>
+        <if test="batchId != null">AND r.batch_id = #{batchId}</if>
+        <if test="runType != null">AND r.run_type = #{runType}</if>
+        <if test="distinctLatest">
+            GROUP BY r.flow_id
+        </if>
+        ORDER BY r.start_time DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="selectRunsByFlowId" resultType="map">
+        SELECT * FROM brick_flow_run
+        WHERE flow_id = #{flowId}
+        <if test="status != null">AND status = #{status}</if>
+        <if test="startDate != null">AND start_time &gt;= #{startDate}</if>
+        <if test="endDate != null">AND start_time &lt;= #{endDate}</if>
+        ORDER BY start_time DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_flow_run (
+            flow_id, status, triggered_by, run_type, duration_ms, error_msg,
+            override_base_url, start_time, suite_run_id, batch_id, remark, create_by
+        ) VALUES (
+            #{flowId}, #{status}, #{triggeredBy}, #{runType}, #{durationMs}, #{errorMsg},
+            #{overrideBaseUrl}, #{startTime}, #{suiteRunId}, #{batchId}, #{remark}, #{createBy}
+        )
+    </insert>
+
+    <update id="updateStatusAndDuration">
+        UPDATE brick_flow_run SET
+            status = #{status},
+            duration_ms = #{durationMs},
+            error_msg = #{errorMsg},
+            end_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateBatchId">
+        UPDATE brick_flow_run SET batch_id = #{batchId} WHERE id = #{id}
+    </update>
+
+</mapper>

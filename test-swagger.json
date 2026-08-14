@@ -1,0 +1,364 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Brick Platform Test API",
+    "description": "Brick Interface Automation Testing Platform",
+    "version": "1.0.0"
+  },
+  "host": "api.example.com",
+  "basePath": "/v1",
+  "schemes": ["http", "https"],
+  "produces": ["application/json"],
+  "consumes": ["application/json"],
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "Get user list",
+        "description": "Paginated query of users",
+        "operationId": "getUserList",
+        "tags": ["User Management"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Page size",
+            "type": "integer",
+            "default": 10
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "Search keyword",
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "code": {"type": "integer", "example": 200},
+                "message": {"type": "string", "example": "success"},
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "total": {"type": "integer", "example": 100},
+                    "list": {
+                      "type": "array",
+                      "items": {"$ref": "#/definitions/User"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create user",
+        "description": "Create a new user",
+        "operationId": "createUser",
+        "tags": ["User Management"],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {"$ref": "#/definitions/UserCreate"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {"$ref": "#/definitions/ApiResponse"}
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "summary": "Get user detail",
+        "description": "Get user detail by ID",
+        "operationId": "getUserById",
+        "tags": ["User Management"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {"$ref": "#/definitions/User"}
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update user",
+        "description": "Update user information",
+        "operationId": "updateUser",
+        "tags": ["User Management"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {"$ref": "#/definitions/UserUpdate"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {"$ref": "#/definitions/ApiResponse"}
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete user",
+        "description": "Delete user by ID",
+        "operationId": "deleteUser",
+        "tags": ["User Management"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {"$ref": "#/definitions/ApiResponse"}
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "User login",
+        "description": "Username and password login",
+        "operationId": "login",
+        "tags": ["Authentication"],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["username", "password"],
+              "properties": {
+                "username": {"type": "string", "example": "admin"},
+                "password": {"type": "string", "example": "123456"}
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Login success",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "code": {"type": "integer", "example": 200},
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "token": {"type": "string", "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."},
+                    "expiresIn": {"type": "integer", "example": 7200}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders": {
+      "get": {
+        "summary": "Get order list",
+        "description": "Query all orders of user",
+        "operationId": "getOrderList",
+        "tags": ["Order Management"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Order status",
+            "type": "string",
+            "enum": ["pending", "paid", "shipped", "completed", "cancelled"]
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Start date",
+            "type": "string",
+            "format": "date"
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "End date",
+            "type": "string",
+            "format": "date"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "array",
+                  "items": {"$ref": "#/definitions/Order"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create order",
+        "description": "Create a new order",
+        "operationId": "createOrder",
+        "tags": ["Order Management"],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {"$ref": "#/definitions/OrderCreate"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {"$ref": "#/definitions/ApiResponse"}
+          }
+        }
+      }
+    },
+    "/products/{id}/stock": {
+      "get": {
+        "summary": "Get product stock",
+        "description": "Query stock quantity of product",
+        "operationId": "getProductStock",
+        "tags": ["Product Management"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Product ID",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "productId": {"type": "integer"},
+                "stock": {"type": "integer"},
+                "reserved": {"type": "integer"}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "User": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "integer", "description": "User ID"},
+        "username": {"type": "string", "description": "Username"},
+        "email": {"type": "string", "format": "email", "description": "Email"},
+        "phone": {"type": "string", "description": "Phone number"},
+        "status": {"type": "string", "enum": ["active", "inactive", "banned"], "description": "Status"},
+        "createTime": {"type": "string", "format": "date-time", "description": "Create time"}
+      }
+    },
+    "UserCreate": {
+      "type": "object",
+      "required": ["username", "password", "email"],
+      "properties": {
+        "username": {"type": "string", "minLength": 3, "maxLength": 50},
+        "password": {"type": "string", "minLength": 6},
+        "email": {"type": "string", "format": "email"},
+        "phone": {"type": "string"}
+      }
+    },
+    "UserUpdate": {
+      "type": "object",
+      "properties": {
+        "email": {"type": "string", "format": "email"},
+        "phone": {"type": "string"},
+        "status": {"type": "string", "enum": ["active", "inactive"]}
+      }
+    },
+    "Order": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "integer"},
+        "orderNo": {"type": "string", "description": "Order number"},
+        "userId": {"type": "integer"},
+        "totalAmount": {"type": "number", "format": "decimal"},
+        "status": {"type": "string"},
+        "createTime": {"type": "string", "format": "date-time"}
+      }
+    },
+    "OrderCreate": {
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": {"type": "integer"},
+              "quantity": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        "remark": {"type": "string"}
+      }
+    },
+    "ApiResponse": {
+      "type": "object",
+      "properties": {
+        "code": {"type": "integer", "example": 200},
+        "message": {"type": "string", "example": "success"},
+        "data": {"type": "object"}
+      }
+    }
+  }
+}

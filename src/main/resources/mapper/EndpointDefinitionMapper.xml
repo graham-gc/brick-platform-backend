@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.EndpointDefinitionMapper">
+
+    <resultMap id="BaseResultMap" type="apiworkflow.entity.EndpointDefinition">
+        <id column="id" property="id"/>
+        <result column="env" property="env"/>
+        <result column="swagger_mapping_id" property="swaggerMappingId"/>
+        <result column="app_config_id" property="appConfigId"/>
+        <result column="protocol" property="protocol"/>
+        <result column="host" property="host"/>
+        <result column="base_path" property="basePath"/>
+        <result column="endpoint_path" property="endpointPath"/>
+        <result column="full_url" property="fullUrl"/>
+        <result column="http_method" property="httpMethod"/>
+        <result column="operation_id" property="operationId"/>
+        <result column="summary" property="summary"/>
+        <result column="description" property="description"/>
+        <result column="tags" property="tags"/>
+        <result column="deprecated" property="deprecated"/>
+        <result column="swagger_version" property="swaggerVersion"/>
+        <result column="consumes_types" property="consumesTypes"/>
+        <result column="produces_types" property="producesTypes"/>
+        <result column="swagger_url" property="swaggerUrl"/>
+        <result column="doc_checksum" property="docChecksum"/>
+        <result column="is_lightweight" property="isLightweight"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM brick_endpoint_definition WHERE id = #{id}
+    </select>
+
+    <select id="selectByUniqueKeyWithSwaggerMappingId" resultMap="BaseResultMap">
+        SELECT * FROM brick_endpoint_definition
+        WHERE swagger_mapping_id = #{swaggerMappingId}
+          AND http_method = #{httpMethod}
+          AND endpoint_path = #{endpointPath}
+          AND host = #{host}
+          AND base_path = #{basePath}
+          AND is_deleted = #{isDeleted}
+        LIMIT 1
+    </select>
+
+    <select id="selectPageBySwaggerMappingId" resultMap="BaseResultMap">
+        SELECT * FROM brick_endpoint_definition
+        WHERE swagger_mapping_id = #{swaggerMappingId} AND is_deleted = #{isDeleted}
+        <if test="httpMethod != null">AND http_method = #{httpMethod}</if>
+        <if test="keyword != null">AND (endpoint_path LIKE CONCAT('%', #{keyword}, '%') OR summary LIKE CONCAT('%', #{keyword}, '%'))</if>
+        ORDER BY update_time DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="selectAllBySwaggerMappingId" resultMap="BaseResultMap">
+        SELECT * FROM brick_endpoint_definition
+        WHERE swagger_mapping_id = #{swaggerMappingId} AND is_deleted = #{isDeleted}
+    </select>
+
+    <select id="batchEndpointStats" resultType="map">
+        SELECT
+            swagger_mapping_id,
+            COUNT(*) as total,
+            SUM(CASE WHEN is_lightweight = 0 THEN 1 ELSE 0 END) as non_lightweight,
+            http_method,
+            MAX(update_time) as latest_update_time
+        FROM brick_endpoint_definition
+        WHERE swagger_mapping_id IN
+        <foreach collection="swaggerMappingIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND is_deleted = #{isDeleted}
+        <if test="keyword != null">
+            AND (endpoint_path LIKE CONCAT('%', #{keyword}, '%') OR summary LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        GROUP BY swagger_mapping_id, http_method
+    </select>
+
+    <select id="batchLatestUpdateTimes" resultType="map">
+        SELECT swagger_mapping_id, MAX(update_time) as latest_update_time
+        FROM brick_endpoint_definition
+        WHERE swagger_mapping_id IN
+        <foreach collection="swaggerMappingIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND is_deleted = #{isDeleted}
+        GROUP BY swagger_mapping_id
+    </select>
+
+    <select id="countCoveredEndpointsBySwaggerMappingId" resultType="int">
+        SELECT COUNT(DISTINCT endpoint_id)
+        FROM brick_flow_node
+        WHERE endpoint_id IN (
+            SELECT id FROM brick_endpoint_definition WHERE swagger_mapping_id = #{swaggerMappingId}
+        )
+        AND is_deleted = 0
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_endpoint_definition (
+            env, swagger_mapping_id, app_config_id, protocol, host, base_path,
+            endpoint_path, full_url, http_method, operation_id, summary, description,
+            tags, deprecated, swagger_version, consumes_types, produces_types,
+            swagger_url, doc_checksum, is_lightweight, is_deleted, create_by, create_time
+        ) VALUES (
+            #{env}, #{swaggerMappingId}, #{appConfigId}, #{protocol}, #{host}, #{basePath},
+            #{endpointPath}, #{fullUrl}, #{httpMethod}, #{operationId}, #{summary}, #{description},
+            #{tags}, #{deprecated}, #{swaggerVersion}, #{consumesTypes}, #{producesTypes},
+            #{swaggerUrl}, #{docChecksum}, #{isLightweight}, #{isDeleted}, #{createBy}, NOW()
+        )
+    </insert>
+
+    <insert id="batchInsert">
+        INSERT INTO brick_endpoint_definition (
+            env, swagger_mapping_id, app_config_id, protocol, host, base_path,
+            endpoint_path, full_url, http_method, operation_id, summary, description,
+            tags, deprecated, swagger_version, consumes_types, produces_types,
+            swagger_url, doc_checksum, is_lightweight, is_deleted, create_by, create_time
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.env}, #{item.swaggerMappingId}, #{item.appConfigId}, #{item.protocol}, #{item.host}, #{item.basePath},
+                #{item.endpointPath}, #{item.fullUrl}, #{item.httpMethod}, #{item.operationId}, #{item.summary}, #{item.description},
+                #{item.tags}, #{item.deprecated}, #{item.swaggerVersion}, #{item.consumesTypes}, #{item.producesTypes},
+                #{item.swaggerUrl}, #{item.docChecksum}, #{item.isLightweight}, #{item.isDeleted}, #{item.createBy}, NOW()
+            )
+        </foreach>
+    </insert>
+
+    <update id="updateById">
+        UPDATE brick_endpoint_definition SET
+            protocol = #{protocol},
+            host = #{host},
+            base_path = #{basePath},
+            endpoint_path = #{endpointPath},
+            full_url = #{fullUrl},
+            http_method = #{httpMethod},
+            operation_id = #{operationId},
+            summary = #{summary},
+            description = #{description},
+            tags = #{tags},
+            deprecated = #{deprecated},
+            swagger_version = #{swaggerVersion},
+            consumes_types = #{consumesTypes},
+            produces_types = #{producesTypes},
+            swagger_url = #{swaggerUrl},
+            doc_checksum = #{docChecksum},
+            is_lightweight = #{isLightweight},
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="softDeleteById">
+        UPDATE brick_endpoint_definition SET is_deleted = 1, update_by = #{updateBy}, update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="markDeletedBySwaggerMappingId">
+        UPDATE brick_endpoint_definition SET is_deleted = 1, update_by = #{updateBy}, update_time = NOW()
+        WHERE swagger_mapping_id = #{swaggerMappingId}
+    </update>
+
+</mapper>

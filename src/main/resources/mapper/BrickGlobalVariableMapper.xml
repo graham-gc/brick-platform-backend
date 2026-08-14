@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.BrickGlobalVariableMapper">
+
+    <resultMap id="BaseResultMap" type="apiworkflow.entity.BrickGlobalVariable">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="type" property="type"/>
+        <result column="description" property="description"/>
+        <result column="config" property="config"/>
+        <result column="is_enabled" property="isEnabled"/>
+        <result column="category" property="category"/>
+        <result column="syntax" property="syntax"/>
+        <result column="has_params" property="hasParams"/>
+        <result column="example" property="example"/>
+        <result column="sample_result" property="sampleResult"/>
+        <result column="param_schema" property="paramSchema"/>
+        <result column="data_type" property="dataType"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM brick_global_variable WHERE id = #{id}
+    </select>
+
+    <select id="selectByName" resultMap="BaseResultMap">
+        SELECT * FROM brick_global_variable WHERE name = #{name}
+    </select>
+
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT * FROM brick_global_variable WHERE 1=1
+        <if test="query != null">
+            <if test="query.type != null">AND type = #{query.type}</if>
+            <if test="query.name != null">AND name LIKE CONCAT('%', #{query.name}, '%')</if>
+            <if test="query.category != null">AND category = #{query.category}</if>
+        </if>
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="selectByType" resultMap="BaseResultMap">
+        SELECT * FROM brick_global_variable WHERE type = #{type} AND is_enabled = 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_global_variable (
+            name, type, description, config, is_enabled, category, syntax,
+            has_params, example, sample_result, param_schema, data_type, create_by, create_time
+        ) VALUES (
+            #{name}, #{type}, #{description}, #{config}, #{isEnabled}, #{category}, #{syntax},
+            #{hasParams}, #{example}, #{sampleResult}, #{paramSchema}, #{dataType}, #{createBy}, NOW()
+        )
+    </insert>
+
+    <update id="updateById">
+        UPDATE brick_global_variable SET
+            name = #{name},
+            type = #{type},
+            description = #{description},
+            config = #{config},
+            is_enabled = #{isEnabled},
+            category = #{category},
+            syntax = #{syntax},
+            has_params = #{hasParams},
+            example = #{example},
+            sample_result = #{sampleResult},
+            param_schema = #{paramSchema},
+            data_type = #{dataType},
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM brick_global_variable WHERE id = #{id}
+    </delete>
+
+</mapper>
