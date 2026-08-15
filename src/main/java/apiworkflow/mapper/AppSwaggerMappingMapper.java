@@ -21,5 +21,5 @@ public interface AppSwaggerMappingMapper {
 
     int softDeleteById(@Param("id") Integer id, @Param("updateBy") String updateBy);
 
-    List<AppSwaggerMapping> selectList(AppSwaggerMapping query);
+    List<AppSwaggerMapping> selectList(@Param("query") AppSwaggerMapping query);
 }

@@ -69,12 +69,39 @@
         LIMIT #{offset}, #{limit}
     </select>
 
+    <select id="count" resultType="int">
+        SELECT COUNT(DISTINCT f.id)
+        FROM brick_flow f
+        <if test="executionStatus != null">
+            INNER JOIN brick_flow_run r ON f.id = r.flow_id
+        </if>
+        WHERE f.is_deleted = 0
+        <if test="query != null">
+            <if test="query.name != null">AND f.name LIKE CONCAT('%', #{query.name}, '%')</if>
+            <if test="query.env != null">AND f.env = #{query.env}</if>
+            <if test="query.swaggerMappingId != null">AND f.swagger_mapping_id = #{query.swaggerMappingId}</if>
+            <if test="query.appConfigId != null">AND f.app_config_id = #{query.appConfigId}</if>
+        </if>
+        <if test="executionStatus != null">
+            AND r.status = #{executionStatus}
+        </if>
+    </select>
+
     <select id="selectTemplatesBySwaggerMappingId" resultMap="BaseResultMap">
         SELECT * FROM brick_flow
         WHERE swagger_mapping_id = #{swaggerMappingId} AND version = 0 AND is_deleted = 0
         <if test="flowName != null">AND name LIKE CONCAT('%', #{flowName}, '%')</if>
         ORDER BY update_time DESC
         LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countTemplatesBySwaggerMappingId" resultType="int">
+        SELECT COUNT(*)
+        FROM brick_flow
+        WHERE swagger_mapping_id = #{swaggerMappingId}
+          AND version = 0
+          AND is_deleted = 0
+        <if test="flowName != null">AND name LIKE CONCAT('%', #{flowName}, '%')</if>
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">

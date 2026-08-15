@@ -44,7 +44,10 @@ public class BrickController {
     @PostMapping("/mappings")
     public ApiResponse<Integer> createMapping(@RequestBody AppSwaggerMapping record) {
         int result = apiService.createMapping(record);
-        return ApiResponse.success(result);
+        if (result != 1 || record.getId() == null) {
+            return ApiResponse.error("Failed to create Swagger mapping");
+        }
+        return ApiResponse.success(record.getId());
     }
 
     @PostMapping("/mappings/update")

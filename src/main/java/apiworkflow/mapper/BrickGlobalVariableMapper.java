@@ -11,7 +11,7 @@ public interface BrickGlobalVariableMapper {
 
     BrickGlobalVariable selectByName(String name);
 
-    List<BrickGlobalVariable> selectList(BrickGlobalVariable query);
+    List<BrickGlobalVariable> selectList(@Param("query") BrickGlobalVariable query);
 
     List<BrickGlobalVariable> selectByType(String type);
 
