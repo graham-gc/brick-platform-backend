@@ -57,23 +57,8 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
         flow.setCreateBy(operator);
         int result = flowMapper.insert(flow);
 
-        if (nodes != null && !nodes.isEmpty()) {
-            for (BrickFlowNode node : nodes) {
-                node.setFlowId(flow.getId());
-                node.setIsDeleted(0);
-                node.setCreateBy(operator);
-            }
-            nodeMapper.batchInsert(nodes);
-        }
-
-        if (edges != null && !edges.isEmpty()) {
-            for (BrickFlowEdge edge : edges) {
-                edge.setFlowId(flow.getId());
-                edge.setIsDeleted(0);
-                edge.setCreateBy(operator);
-            }
-            edgeMapper.batchInsert(edges);
-        }
+        Map<Long, Long> nodeIdMap = insertNewNodes(flow.getId(), nodes, operator);
+        replaceEdges(flow.getId(), edges, nodeIdMap, operator, false);
 
         return result;
     }
@@ -85,37 +70,11 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
         flow.setCreateBy(operator);
         int result = flowMapper.insert(flow);
 
-        if (fullNodes != null && !fullNodes.isEmpty()) {
-            List<BrickFlowNode> nodes = new ArrayList<>();
-            for (BrickFlowFullNode fullNode : fullNodes) {
-                BrickFlowNode node = new BrickFlowNode();
-                node.setFlowId(flow.getId());
-                node.setEndpointId(fullNode.getEndpointId());
-                node.setTimeoutSec(fullNode.getTimeoutSec());
-                node.setRetries(fullNode.getRetries());
-                node.setHeadersJson(fullNode.getHeadersJson());
-                node.setPayloadJson(fullNode.getPayloadJson());
-                node.setQueryParamsJson(fullNode.getQueryParamsJson());
-                node.setPathVarsJson(fullNode.getPathVarsJson());
-                node.setNodeType(fullNode.getNodeType());
-                node.setGrpcEndpointId(fullNode.getGrpcEndpointId());
-                node.setX(fullNode.getX());
-                node.setY(fullNode.getY());
-                node.setIsDeleted(0);
-                node.setCreateBy(operator);
-                nodes.add(node);
-            }
-            nodeMapper.batchInsert(nodes);
-        }
-
-        if (edges != null && !edges.isEmpty()) {
-            for (BrickFlowEdge edge : edges) {
-                edge.setFlowId(flow.getId());
-                edge.setIsDeleted(0);
-                edge.setCreateBy(operator);
-            }
-            edgeMapper.batchInsert(edges);
-        }
+        List<BrickFlowNode> nodes = fullNodes == null
+                ? Collections.emptyList()
+                : new ArrayList<>(fullNodes);
+        Map<Long, Long> nodeIdMap = insertNewNodes(flow.getId(), nodes, operator);
+        replaceEdges(flow.getId(), edges, nodeIdMap, operator, false);
 
         return result;
     }
@@ -123,30 +82,139 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     @Override
     @Transactional
     public int updateFlow(BrickFlow flow, List<BrickFlowNode> nodes, List<BrickFlowEdge> edges, String operator) {
+        if (flow == null || flow.getId() == null) {
+            throw new IllegalArgumentException("Flow id is required when updating a flow");
+        }
+
         flow.setUpdateBy(operator);
         int result = flowMapper.updateById(flow);
 
-        nodeMapper.deleteByFlowId(flow.getId());
-        if (nodes != null && !nodes.isEmpty()) {
-            for (BrickFlowNode node : nodes) {
-                node.setFlowId(flow.getId());
-                node.setIsDeleted(0);
-                node.setCreateBy(operator);
-            }
-            nodeMapper.batchInsert(nodes);
-        }
-
-        edgeMapper.deleteByFlowId(flow.getId());
-        if (edges != null && !edges.isEmpty()) {
-            for (BrickFlowEdge edge : edges) {
-                edge.setFlowId(flow.getId());
-                edge.setIsDeleted(0);
-                edge.setCreateBy(operator);
-            }
-            edgeMapper.batchInsert(edges);
-        }
+        Map<Long, Long> nodeIdMap = synchronizeNodes(flow.getId(), nodes, operator);
+        replaceEdges(flow.getId(), edges, nodeIdMap, operator, true);
 
         return result;
+    }
+
+    /**
+     * Inserts every canvas node as an independent flow_node row and returns the mapping from
+     * the client-side node reference to the generated database id. endpoint_id is deliberately
+     * not used as an identity because the same endpoint may occur multiple times in one flow.
+     */
+    private Map<Long, Long> insertNewNodes(Integer flowId, List<? extends BrickFlowNode> nodes, String operator) {
+        List<? extends BrickFlowNode> safeNodes = nodes == null ? Collections.emptyList() : nodes;
+        validateUniqueClientNodeIds(safeNodes);
+
+        Map<Long, Long> nodeIdMap = new HashMap<>();
+        for (BrickFlowNode node : safeNodes) {
+            Long clientNodeId = node.getId();
+            prepareNewNode(node, flowId, operator);
+            int inserted = nodeMapper.insert(node);
+            if (inserted != 1 || node.getId() == null) {
+                throw new IllegalStateException("Database did not return an id for a new flow node");
+            }
+            if (clientNodeId != null) {
+                nodeIdMap.put(clientNodeId, node.getId());
+            }
+        }
+        return nodeIdMap;
+    }
+
+    /**
+     * Keeps persisted node ids stable during edits, inserts new client-side nodes, and soft
+     * deletes nodes omitted from the submitted canvas.
+     */
+    private Map<Long, Long> synchronizeNodes(Integer flowId, List<BrickFlowNode> nodes, String operator) {
+        List<BrickFlowNode> safeNodes = nodes == null ? Collections.emptyList() : nodes;
+        validateUniqueClientNodeIds(safeNodes);
+
+        Map<Long, BrickFlowNode> existingNodes = nodeMapper.selectByFlowId(flowId).stream()
+                .collect(Collectors.toMap(BrickFlowNode::getId, node -> node));
+        Map<Long, Long> nodeIdMap = new HashMap<>();
+
+        nodeMapper.deleteByFlowId(flowId);
+        for (BrickFlowNode node : safeNodes) {
+            Long clientNodeId = node.getId();
+            if (clientNodeId != null && existingNodes.containsKey(clientNodeId)) {
+                node.setFlowId(flowId);
+                node.setIsDeleted(0);
+                node.setUpdateBy(operator);
+                nodeMapper.updateById(node);
+                nodeIdMap.put(clientNodeId, clientNodeId);
+                continue;
+            }
+
+            if (clientNodeId != null && clientNodeId > 0 && nodeMapper.selectById(clientNodeId) != null) {
+                throw new IllegalArgumentException(
+                        "Node " + clientNodeId + " does not belong to active flow " + flowId);
+            }
+
+            prepareNewNode(node, flowId, operator);
+            int inserted = nodeMapper.insert(node);
+            if (inserted != 1 || node.getId() == null) {
+                throw new IllegalStateException("Database did not return an id for a new flow node");
+            }
+            if (clientNodeId != null) {
+                nodeIdMap.put(clientNodeId, node.getId());
+            }
+        }
+        return nodeIdMap;
+    }
+
+    private void prepareNewNode(BrickFlowNode node, Integer flowId, String operator) {
+        node.setId(null);
+        node.setFlowId(flowId);
+        node.setIsDeleted(0);
+        node.setCreateBy(operator);
+        node.setUpdateBy(null);
+    }
+
+    private void validateUniqueClientNodeIds(List<? extends BrickFlowNode> nodes) {
+        Set<Long> clientNodeIds = new HashSet<>();
+        for (BrickFlowNode node : nodes) {
+            if (node == null) {
+                throw new IllegalArgumentException("Flow nodes must not contain null entries");
+            }
+            Long clientNodeId = node.getId();
+            if (clientNodeId != null && !clientNodeIds.add(clientNodeId)) {
+                throw new IllegalArgumentException("Duplicate client node id: " + clientNodeId);
+            }
+        }
+    }
+
+    private void replaceEdges(Integer flowId, List<BrickFlowEdge> edges,
+                              Map<Long, Long> nodeIdMap, String operator, boolean deleteExisting) {
+        if (deleteExisting) {
+            edgeMapper.deleteByFlowId(flowId);
+        }
+        if (edges == null || edges.isEmpty()) {
+            return;
+        }
+
+        for (BrickFlowEdge edge : edges) {
+            if (edge == null) {
+                throw new IllegalArgumentException("Flow edges must not contain null entries");
+            }
+            edge.setId(null);
+            edge.setFlowId(flowId);
+            edge.setSourceNodeId(resolveNodeId(edge.getSourceNodeId(), nodeIdMap, "source"));
+            edge.setTargetNodeId(resolveNodeId(edge.getTargetNodeId(), nodeIdMap, "target"));
+            edge.setIsDeleted(0);
+            edge.setCreateBy(operator);
+            edge.setUpdateBy(null);
+        }
+        edgeMapper.batchInsert(edges);
+    }
+
+    private Long resolveNodeId(Long clientNodeId, Map<Long, Long> nodeIdMap, String edgeEnd) {
+        if (clientNodeId == null) {
+            throw new IllegalArgumentException("Edge " + edgeEnd + " node id is required");
+        }
+        Long databaseNodeId = nodeIdMap.get(clientNodeId);
+        if (databaseNodeId == null) {
+            throw new IllegalArgumentException(
+                    "Edge " + edgeEnd + " references a node not present in the submitted flow: " + clientNodeId);
+        }
+        return databaseNodeId;
     }
 
     @Override
@@ -309,20 +377,10 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
         int result = flowMapper.insert(newFlow);
 
         List<BrickFlowNode> nodes = nodeMapper.selectByFlowId(sourceFlowId);
-        if (!nodes.isEmpty()) {
-            for (BrickFlowNode node : nodes) {
-                node.setFlowId(newFlow.getId());
-            }
-            nodeMapper.batchInsert(nodes);
-        }
+        Map<Long, Long> nodeIdMap = insertNewNodes(newFlow.getId(), nodes, operator);
 
         List<BrickFlowEdge> edges = edgeMapper.selectByFlowId(sourceFlowId);
-        if (!edges.isEmpty()) {
-            for (BrickFlowEdge edge : edges) {
-                edge.setFlowId(newFlow.getId());
-            }
-            edgeMapper.batchInsert(edges);
-        }
+        replaceEdges(newFlow.getId(), edges, nodeIdMap, operator, false);
 
         return result;
     }

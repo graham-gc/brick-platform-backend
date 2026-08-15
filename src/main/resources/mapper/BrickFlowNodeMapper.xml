@@ -96,6 +96,7 @@
             grpc_discovery_config = #{grpcDiscoveryConfig},
             x = #{x},
             y = #{y},
+            is_deleted = #{isDeleted},
             endpoint_app_config_id = #{endpointAppConfigId},
             update_by = #{updateBy},
             update_time = NOW()
