@@ -52,6 +52,11 @@ class SwaggerDocumentParserTest {
                         .getJSONObject("schema").getString("$ref"));
         assertEquals("usr-1001", createOrderRequest.getJSONObject("requestBody")
                 .getJSONObject("example").getString("customerId"));
+        assertEquals("201", createOrderRequest.getJSONArray("responses")
+                .getJSONObject(0).getString("statusCode"));
+        assertEquals("#/components/schemas/OrderResponse",
+                createOrderRequest.getJSONArray("responses").getJSONObject(0)
+                        .getJSONObject("schema").getString("$ref"));
 
         assertEquals(20, document.getSchemas().size());
         EndpointSchema createOrderSchema = schema(document, "CreateOrderRequest");

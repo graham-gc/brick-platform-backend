@@ -305,7 +305,60 @@ public class SwaggerDocumentParser {
         if (requestBody != null) {
             definition.put("requestBody", requestBody);
         }
+        definition.put("responses", parseResponses(root, swaggerVersion, operation));
         return definition;
+    }
+
+    private JSONArray parseResponses(JSONObject root, String swaggerVersion, JSONObject operation) {
+        JSONArray result = new JSONArray();
+        JSONObject responses = operation.getJSONObject("responses");
+        if (responses == null) {
+            return result;
+        }
+        List<String> statusCodes = new ArrayList<>(responses.keySet());
+        Collections.sort(statusCodes);
+        for (String statusCode : statusCodes) {
+            JSONObject source = resolveObject(root, responses.getJSONObject(statusCode));
+            if (source == null) {
+                continue;
+            }
+            JSONObject response = new JSONObject(true);
+            response.put("statusCode", statusCode);
+            if (source.get("description") != null) {
+                response.put("description", source.get("description"));
+            }
+
+            if ("v2".equals(swaggerVersion)) {
+                response.put("contentType", firstCsvValue(swagger2Produces(root, operation)));
+                if (source.getJSONObject("schema") != null) {
+                    response.put("schema", source.getJSONObject("schema"));
+                }
+                JSONObject examples = source.getJSONObject("examples");
+                String contentType = response.getString("contentType");
+                if (examples != null && StringUtils.hasText(contentType) && examples.get(contentType) != null) {
+                    response.put("example", examples.get(contentType));
+                }
+            } else {
+                JSONObject content = source.getJSONObject("content");
+                String contentType = preferredContentType(content);
+                response.put("contentType", contentType);
+                JSONObject mediaType = contentType == null ? null : content.getJSONObject(contentType);
+                if (mediaType != null) {
+                    if (mediaType.getJSONObject("schema") != null) {
+                        response.put("schema", mediaType.getJSONObject("schema"));
+                    }
+                    Object example = mediaType.get("example");
+                    if (example == null && mediaType.getJSONObject("schema") != null) {
+                        example = mediaType.getJSONObject("schema").get("example");
+                    }
+                    if (example != null) {
+                        response.put("example", example);
+                    }
+                }
+            }
+            result.add(response);
+        }
+        return result;
     }
 
     private void collectParameters(JSONObject root, JSONArray source,

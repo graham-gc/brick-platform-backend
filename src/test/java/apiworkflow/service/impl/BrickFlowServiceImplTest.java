@@ -7,6 +7,7 @@ import apiworkflow.entity.BrickFlowRun;
 import apiworkflow.entity.BrickFlowRunNode;
 import apiworkflow.entity.EndpointDefinition;
 import apiworkflow.execution.FlowHttpExecutor;
+import apiworkflow.execution.FlowContextEngine;
 import apiworkflow.mapper.BrickFlowEdgeMapper;
 import apiworkflow.mapper.BrickFlowMapper;
 import apiworkflow.mapper.BrickFlowNodeMapper;
@@ -70,6 +71,7 @@ class BrickFlowServiceImplTest {
         ReflectionTestUtils.setField(service, "runNodeMapper", runNodeMapper);
         ReflectionTestUtils.setField(service, "endpointDefinitionMapper", endpointDefinitionMapper);
         ReflectionTestUtils.setField(service, "flowHttpExecutor", flowHttpExecutor);
+        ReflectionTestUtils.setField(service, "flowContextEngine", new FlowContextEngine());
     }
 
     @Test
@@ -280,6 +282,37 @@ class BrickFlowServiceImplTest {
         assertEquals("failed", run.getStatus());
         verify(flowHttpExecutor).execute(eq(501L), eq(flow), eq(join),
                 any(EndpointDefinition.class), isNull(), isNull());
+    }
+
+    @Test
+    void carriesAnExtractedResponseVariableIntoADownstreamRequestField() {
+        BrickFlow flow = runnableFlow(12, 501L);
+        BrickFlowNode source = node(101L, 1);
+        source.setResponseVariablesJson(
+                "[{\"name\":\"orderId\",\"responsePath\":\"$.data.id\"}]");
+        BrickFlowNode target = node(102L, 2);
+        target.setPathVarsJson("{\"orderId\":\"preview\"}");
+        target.setRequestVariableBindingsJson(
+                "[{\"variableName\":\"orderId\",\"targetType\":\"PATH\",\"targetPath\":\"orderId\"}]");
+        when(nodeMapper.selectByFlowId(12)).thenReturn(Arrays.asList(target, source));
+        when(edgeMapper.selectByFlowId(12)).thenReturn(
+                Collections.singletonList(edge(301L, 101L, 102L)));
+        when(endpointDefinitionMapper.selectById(1)).thenReturn(endpoint(1));
+        when(endpointDefinitionMapper.selectById(2)).thenReturn(endpoint(2));
+        when(flowHttpExecutor.execute(eq(501L), eq(flow), eq(source), any(EndpointDefinition.class),
+                isNull(), isNull())).thenAnswer(invocation -> {
+            BrickFlowRunNode result = successfulRunNode(source);
+            result.setFullResponse("{\"data\":{\"id\":\"ord-2001\"}}");
+            return result;
+        });
+        when(flowHttpExecutor.execute(eq(501L), eq(flow), eq(target), any(EndpointDefinition.class),
+                isNull(), isNull())).thenAnswer(invocation -> successfulRunNode(target));
+
+        BrickFlowRun run = service.runFlow(flow.getId(), "graham", null, 0);
+
+        assertEquals("success", run.getStatus());
+        assertEquals("ord-2001", com.alibaba.fastjson.JSON.parseObject(target.getPathVarsJson())
+                .getString("orderId"));
     }
 
     private BrickFlow runnableFlow(Integer flowId, Long runId) {

@@ -15,6 +15,8 @@ public class BrickFlowNode implements Serializable {
     private String payloadJson;
     private String queryParamsJson;
     private String pathVarsJson;
+    private String responseVariablesJson;
+    private String requestVariableBindingsJson;
     private Integer conditionGroupId;
     private Long tokenConfigId;
     private Long signConfigId;

@@ -122,6 +122,8 @@ CREATE TABLE IF NOT EXISTS brick_flow_node (
     payload_json TEXT,
     query_params_json TEXT,
     path_vars_json TEXT,
+    response_variables_json TEXT,
+    request_variable_bindings_json TEXT,
     condition_group_id INT,
     token_config_id BIGINT,
     sign_config_id BIGINT,

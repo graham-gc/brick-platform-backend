@@ -3,6 +3,7 @@ package apiworkflow.service.impl;
 import apiworkflow.dto.BrickFlowFullNode;
 import apiworkflow.entity.*;
 import apiworkflow.execution.FlowHttpExecutor;
+import apiworkflow.execution.FlowContextEngine;
 import apiworkflow.mapper.*;
 import apiworkflow.service.IBrickFlowService;
 import com.alibaba.fastjson.JSON;
@@ -37,6 +38,9 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
 
     @Autowired
     private FlowHttpExecutor flowHttpExecutor;
+
+    @Autowired
+    private FlowContextEngine flowContextEngine;
 
     @Override
     public BrickFlow getFlow(Integer id) {
@@ -109,6 +113,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
      */
     private Map<Long, Long> insertNewNodes(Integer flowId, List<? extends BrickFlowNode> nodes, String operator) {
         List<? extends BrickFlowNode> safeNodes = nodes == null ? Collections.emptyList() : nodes;
+        flowContextEngine.validateConfiguration(safeNodes);
         validateUniqueClientNodeIds(safeNodes);
 
         Map<Long, Long> nodeIdMap = new HashMap<>();
@@ -132,6 +137,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
      */
     private Map<Long, Long> synchronizeNodes(Integer flowId, List<BrickFlowNode> nodes, String operator) {
         List<BrickFlowNode> safeNodes = nodes == null ? Collections.emptyList() : nodes;
+        flowContextEngine.validateConfiguration(safeNodes);
         validateUniqueClientNodeIds(safeNodes);
 
         Map<Long, BrickFlowNode> existingNodes = nodeMapper.selectByFlowId(flowId).stream()
@@ -362,6 +368,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
 
         List<BrickFlowNode> pending = new ArrayList<>(nodes);
         pending.sort(Comparator.comparing(BrickFlowNode::getId));
+        Map<String, Object> context = new LinkedHashMap<>();
         FlowScheduleResult result = new FlowScheduleResult();
         while (!pending.isEmpty()) {
             boolean progressed = false;
@@ -380,7 +387,15 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
                                     + normalizedJoinMode(node) + " join strategy");
                     result.blockedCount++;
                 } else {
-                    runNode = executeNode(runId, flow, node, overrideBaseUrl, customHeaders);
+                    try {
+                        flowContextEngine.applyBindings(node, context);
+                        runNode = executeNode(runId, flow, node, overrideBaseUrl, customHeaders);
+                        if ("success".equalsIgnoreCase(runNode.getStatus())) {
+                            flowContextEngine.captureResponseVariables(node, runNode.getFullResponse(), context);
+                        }
+                    } catch (Exception e) {
+                        runNode = failedRunNode(runId, node, rootMessage(e));
+                    }
                     if (!"success".equalsIgnoreCase(runNode.getStatus())) {
                         runNode.setStatus("failed");
                         result.failedCount++;

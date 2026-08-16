@@ -12,6 +12,8 @@
         <result column="payload_json" property="payloadJson"/>
         <result column="query_params_json" property="queryParamsJson"/>
         <result column="path_vars_json" property="pathVarsJson"/>
+        <result column="response_variables_json" property="responseVariablesJson"/>
+        <result column="request_variable_bindings_json" property="requestVariableBindingsJson"/>
         <result column="condition_group_id" property="conditionGroupId"/>
         <result column="token_config_id" property="tokenConfigId"/>
         <result column="sign_config_id" property="signConfigId"/>
@@ -49,12 +51,14 @@
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO brick_flow_node (
             flow_id, endpoint_id, timeout_sec, retries, headers_json, payload_json,
-            query_params_json, path_vars_json, condition_group_id, token_config_id,
+            query_params_json, path_vars_json, response_variables_json, request_variable_bindings_json,
+            condition_group_id, token_config_id,
             sign_config_id, sign_enabled, node_type, join_mode, grpc_endpoint_id, grpc_discovery_config,
             x, y, is_deleted, endpoint_app_config_id, create_by, create_time
         ) VALUES (
             #{flowId}, #{endpointId}, #{timeoutSec}, #{retries}, #{headersJson}, #{payloadJson},
-            #{queryParamsJson}, #{pathVarsJson}, #{conditionGroupId}, #{tokenConfigId},
+            #{queryParamsJson}, #{pathVarsJson}, #{responseVariablesJson}, #{requestVariableBindingsJson},
+            #{conditionGroupId}, #{tokenConfigId},
             #{signConfigId}, #{signEnabled}, #{nodeType}, #{joinMode}, #{grpcEndpointId}, #{grpcDiscoveryConfig},
             #{x}, #{y}, #{isDeleted}, #{endpointAppConfigId}, #{createBy}, NOW()
         )
@@ -63,7 +67,8 @@
     <insert id="batchInsert">
         INSERT INTO brick_flow_node (
             flow_id, endpoint_id, timeout_sec, retries, headers_json, payload_json,
-            query_params_json, path_vars_json, condition_group_id, token_config_id,
+            query_params_json, path_vars_json, response_variables_json, request_variable_bindings_json,
+            condition_group_id, token_config_id,
             sign_config_id, sign_enabled, node_type, join_mode, grpc_endpoint_id, grpc_discovery_config,
             x, y, is_deleted, endpoint_app_config_id, create_by, create_time
         ) VALUES
@@ -71,6 +76,7 @@
             (
                 #{item.flowId}, #{item.endpointId}, #{item.timeoutSec}, #{item.retries},
                 #{item.headersJson}, #{item.payloadJson}, #{item.queryParamsJson}, #{item.pathVarsJson},
+                #{item.responseVariablesJson}, #{item.requestVariableBindingsJson},
                 #{item.conditionGroupId}, #{item.tokenConfigId}, #{item.signConfigId}, #{item.signEnabled},
                 #{item.nodeType}, #{item.joinMode}, #{item.grpcEndpointId}, #{item.grpcDiscoveryConfig},
                 #{item.x}, #{item.y}, #{item.isDeleted}, #{item.endpointAppConfigId},
@@ -88,6 +94,8 @@
             payload_json = #{payloadJson},
             query_params_json = #{queryParamsJson},
             path_vars_json = #{pathVarsJson},
+            response_variables_json = #{responseVariablesJson},
+            request_variable_bindings_json = #{requestVariableBindingsJson},
             condition_group_id = #{conditionGroupId},
             token_config_id = #{tokenConfigId},
             sign_config_id = #{signConfigId},
