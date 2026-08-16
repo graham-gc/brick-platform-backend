@@ -2,9 +2,11 @@ package apiworkflow.service.impl;
 
 import apiworkflow.entity.AppSwaggerMapping;
 import apiworkflow.entity.EndpointDefinition;
+import apiworkflow.entity.EndpointSchema;
 import apiworkflow.entity.SwaggerSyncLog;
 import apiworkflow.mapper.AppSwaggerMappingMapper;
 import apiworkflow.mapper.EndpointDefinitionMapper;
+import apiworkflow.mapper.EndpointSchemaMapper;
 import apiworkflow.mapper.SwaggerSyncLogMapper;
 import apiworkflow.swagger.SwaggerDocumentParser;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,6 +42,9 @@ class BrickApiServiceImplTest {
     private EndpointDefinitionMapper endpointDefinitionMapper;
 
     @Mock
+    private EndpointSchemaMapper endpointSchemaMapper;
+
+    @Mock
     private SwaggerSyncLogMapper swaggerSyncLogMapper;
 
     private BrickApiServiceImpl service;
@@ -53,6 +58,7 @@ class BrickApiServiceImplTest {
         swaggerJson = read("examples/mock-commerce-openapi.json");
         ReflectionTestUtils.setField(service, "swaggerMappingMapper", swaggerMappingMapper);
         ReflectionTestUtils.setField(service, "endpointDefinitionMapper", endpointDefinitionMapper);
+        ReflectionTestUtils.setField(service, "endpointSchemaMapper", endpointSchemaMapper);
         ReflectionTestUtils.setField(service, "swaggerSyncLogMapper", swaggerSyncLogMapper);
         ReflectionTestUtils.setField(service, "swaggerDocumentParser", parser);
     }
@@ -78,6 +84,14 @@ class BrickApiServiceImplTest {
         assertTrue(endpoints.stream().allMatch(endpoint -> Integer.valueOf(7).equals(endpoint.getSwaggerMappingId())));
         assertTrue(endpoints.stream().allMatch(endpoint -> "mock-commerce".equals(endpoint.getAppConfigId())));
         assertTrue(endpoints.stream().allMatch(endpoint -> Integer.valueOf(0).equals(endpoint.getIsDeleted())));
+
+        verify(endpointSchemaMapper).markDeletedBySwaggerMappingId(7, "graham");
+        ArgumentCaptor<List<EndpointSchema>> schemaCaptor = endpointSchemaListCaptor();
+        verify(endpointSchemaMapper).batchUpsert(schemaCaptor.capture());
+        List<EndpointSchema> schemas = schemaCaptor.getValue();
+        assertEquals(20, schemas.size());
+        assertTrue(schemas.stream().allMatch(schema -> Integer.valueOf(7).equals(schema.getSwaggerMappingId())));
+        assertTrue(schemas.stream().allMatch(schema -> "graham".equals(schema.getUpdateBy())));
 
         ArgumentCaptor<SwaggerSyncLog> logCaptor = ArgumentCaptor.forClass(SwaggerSyncLog.class);
         verify(swaggerSyncLogMapper).insert(logCaptor.capture());
@@ -119,6 +133,11 @@ class BrickApiServiceImplTest {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private ArgumentCaptor<List<EndpointDefinition>> endpointListCaptor() {
+        return (ArgumentCaptor) ArgumentCaptor.forClass(List.class);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private ArgumentCaptor<List<EndpointSchema>> endpointSchemaListCaptor() {
         return (ArgumentCaptor) ArgumentCaptor.forClass(List.class);
     }
 

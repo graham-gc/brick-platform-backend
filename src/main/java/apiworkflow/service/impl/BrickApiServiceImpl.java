@@ -2,12 +2,15 @@ package apiworkflow.service.impl;
 
 import apiworkflow.entity.AppSwaggerMapping;
 import apiworkflow.entity.EndpointDefinition;
+import apiworkflow.entity.EndpointSchema;
 import apiworkflow.entity.SwaggerSyncLog;
 import apiworkflow.mapper.AppSwaggerMappingMapper;
 import apiworkflow.mapper.EndpointDefinitionMapper;
+import apiworkflow.mapper.EndpointSchemaMapper;
 import apiworkflow.mapper.SwaggerSyncLogMapper;
 import apiworkflow.service.IBrickApiService;
 import apiworkflow.swagger.ParsedSwaggerDocument;
+import apiworkflow.swagger.EndpointSchemaResolver;
 import apiworkflow.swagger.SwaggerDocumentParser;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -25,11 +28,19 @@ import java.util.*;
 @Service
 public class BrickApiServiceImpl implements IBrickApiService {
 
+    private static final int SCHEMA_BATCH_SIZE = 100;
+
     @Autowired
     private AppSwaggerMappingMapper swaggerMappingMapper;
 
     @Autowired
     private EndpointDefinitionMapper endpointDefinitionMapper;
+
+    @Autowired
+    private EndpointSchemaMapper endpointSchemaMapper;
+
+    @Autowired
+    private EndpointSchemaResolver endpointSchemaResolver;
 
     @Autowired
     private SwaggerSyncLogMapper swaggerSyncLogMapper;
@@ -171,6 +182,8 @@ public class BrickApiServiceImpl implements IBrickApiService {
             endpointDefinitionMapper.batchUpsert(incoming);
         }
 
+        syncSchemas(swaggerMappingId, document.getSchemas(), syncOperator);
+
         Date endTime = new Date();
         SwaggerSyncLog syncLog = new SwaggerSyncLog();
         syncLog.setSwaggerMappingId(swaggerMappingId);
@@ -188,6 +201,20 @@ public class BrickApiServiceImpl implements IBrickApiService {
         swaggerSyncLogMapper.insert(syncLog);
 
         return incoming.size();
+    }
+
+    private void syncSchemas(Integer swaggerMappingId, List<EndpointSchema> schemas, String operator) {
+        endpointSchemaMapper.markDeletedBySwaggerMappingId(swaggerMappingId, operator);
+        for (EndpointSchema schema : schemas) {
+            schema.setSwaggerMappingId(swaggerMappingId);
+            schema.setIsDeleted(0);
+            schema.setCreateBy(operator);
+            schema.setUpdateBy(operator);
+        }
+        for (int fromIndex = 0; fromIndex < schemas.size(); fromIndex += SCHEMA_BATCH_SIZE) {
+            int toIndex = Math.min(fromIndex + SCHEMA_BATCH_SIZE, schemas.size());
+            endpointSchemaMapper.batchUpsert(schemas.subList(fromIndex, toIndex));
+        }
     }
 
     private String endpointKey(EndpointDefinition endpoint) {
@@ -212,6 +239,13 @@ public class BrickApiServiceImpl implements IBrickApiService {
         Map<String, Object> result = new HashMap<>();
         result.put("endpoint", endpoint);
         return result;
+    }
+
+    @Override
+    public Object resolveEndpointSchema(Integer swaggerMappingId, String schemaRef) {
+        List<EndpointSchema> schemas = endpointSchemaMapper
+                .selectBySwaggerMappingId(swaggerMappingId);
+        return endpointSchemaResolver.resolve(schemas, schemaRef);
     }
 
     @Override

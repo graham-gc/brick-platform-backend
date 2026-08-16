@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.EndpointSchemaMapper">
+
+    <resultMap id="BaseResultMap" type="apiworkflow.entity.EndpointSchema">
+        <id column="id" property="id"/>
+        <result column="swagger_mapping_id" property="swaggerMappingId"/>
+        <result column="schema_ref" property="schemaRef"/>
+        <result column="schema_name" property="schemaName"/>
+        <result column="schema_json" property="schemaJson"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectBySwaggerMappingId" resultMap="BaseResultMap">
+        SELECT *
+        FROM brick_endpoint_schema
+        WHERE swagger_mapping_id = #{swaggerMappingId}
+          AND is_deleted = 0
+        ORDER BY schema_name ASC
+    </select>
+
+    <insert id="batchUpsert">
+        INSERT INTO brick_endpoint_schema (
+            swagger_mapping_id, schema_ref, schema_name, schema_json, is_deleted,
+            create_by, update_by, create_time, update_time
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.swaggerMappingId}, #{item.schemaRef}, #{item.schemaName},
+                #{item.schemaJson}, 0, #{item.createBy}, #{item.updateBy}, NOW(), NOW()
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            schema_name = VALUES(schema_name),
+            schema_json = VALUES(schema_json),
+            is_deleted = 0,
+            update_by = VALUES(update_by),
+            update_time = NOW()
+    </insert>
+
+    <update id="markDeletedBySwaggerMappingId">
+        UPDATE brick_endpoint_schema
+        SET is_deleted = 1,
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE swagger_mapping_id = #{swaggerMappingId}
+          AND is_deleted = 0
+    </update>
+
+</mapper>

@@ -1,6 +1,8 @@
 package apiworkflow.swagger;
 
 import apiworkflow.entity.EndpointDefinition;
+import apiworkflow.entity.EndpointSchema;
+import com.alibaba.fastjson.JSON;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -11,6 +13,7 @@ import java.nio.file.Paths;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SwaggerDocumentParserTest {
@@ -39,6 +42,15 @@ class SwaggerDocumentParserTest {
         assertNotNull(createOrder.getDocChecksum());
         assertEquals(64, createOrder.getDocChecksum().length());
 
+        assertEquals(20, document.getSchemas().size());
+        EndpointSchema createOrderSchema = schema(document, "CreateOrderRequest");
+        assertEquals("#/components/schemas/CreateOrderRequest", createOrderSchema.getSchemaRef());
+        assertEquals("#/components/schemas/Address",
+                JSON.parseObject(createOrderSchema.getSchemaJson())
+                        .getJSONObject("properties")
+                        .getJSONObject("deliveryAddress")
+                        .getString("$ref"));
+
         EndpointDefinition login = endpoint(document, "POST", "/auth/login");
         assertEquals("application/json", login.getProducesTypes());
     }
@@ -52,6 +64,8 @@ class SwaggerDocumentParserTest {
         assertEquals("api.example.com", document.getHost());
         assertEquals("/v1", document.getBasePath());
         assertEquals(9, document.getEndpoints().size());
+        assertEquals(6, document.getSchemas().size());
+        assertEquals("#/definitions/User", schema(document, "User").getSchemaRef());
 
         EndpointDefinition createUser = endpoint(document, "POST", "/users");
         assertEquals("application/json", createUser.getConsumesTypes());
@@ -92,11 +106,26 @@ class SwaggerDocumentParserTest {
         assertFalse(error.getMessage().isEmpty());
     }
 
+    @Test
+    void returnsNoSchemasWhenDocumentDefinesNone() {
+        ParsedSwaggerDocument document = parser.parse(
+                "{\"openapi\":\"3.0.3\",\"paths\":{}}", null, null);
+
+        assertTrue(document.getSchemas().isEmpty());
+    }
+
     private EndpointDefinition endpoint(ParsedSwaggerDocument document, String method, String path) {
         return document.getEndpoints().stream()
                 .filter(item -> method.equals(item.getHttpMethod()) && path.equals(item.getEndpointPath()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Endpoint not found: " + method + " " + path));
+    }
+
+    private EndpointSchema schema(ParsedSwaggerDocument document, String name) {
+        return document.getSchemas().stream()
+                .filter(item -> name.equals(item.getSchemaName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Schema not found: " + name));
     }
 
     private String read(String path) throws IOException {

@@ -66,6 +66,23 @@ CREATE TABLE IF NOT EXISTS brick_endpoint_definition (
     INDEX idx_env_app (env, app_config_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 接口Schema表（Swagger文档级公共Schema，由同一映射下的接口共享）
+CREATE TABLE IF NOT EXISTS brick_endpoint_schema (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    swagger_mapping_id INT NOT NULL,
+    schema_ref VARCHAR(500) NOT NULL,
+    schema_name VARCHAR(255) NOT NULL,
+    schema_json LONGTEXT NOT NULL,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    create_by VARCHAR(50),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(50),
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_mapping_schema_ref (swagger_mapping_id, schema_ref),
+    INDEX idx_swagger_mapping (swagger_mapping_id),
+    INDEX idx_schema_name (schema_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 流程主表
 CREATE TABLE IF NOT EXISTS brick_flow (
     id INT PRIMARY KEY AUTO_INCREMENT,

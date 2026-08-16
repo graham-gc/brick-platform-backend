@@ -149,6 +149,13 @@ public class BrickController {
         return ApiResponse.success(detail);
     }
 
+    @GetMapping("/schemas/resolve")
+    public ApiResponse<Object> resolveSchema(
+            @RequestParam Integer swaggerMappingId,
+            @RequestParam String schemaRef) {
+        return ApiResponse.success(apiService.resolveEndpointSchema(swaggerMappingId, schemaRef));
+    }
+
     @PostMapping("/endpoints/stats")
     public ApiResponse<Map<Integer, Map<String, Object>>> getEndpointStats(
             @RequestBody Map<String, Object> request) {

@@ -36,6 +36,8 @@ public interface IBrickApiService {
 
     Map<String, Object> getEndpointDetail(Integer endpointId);
 
+    Object resolveEndpointSchema(Integer swaggerMappingId, String schemaRef);
+
     Map<Integer, Map<String, Object>> getBatchEndpointStats(List<Integer> swaggerMappingIds, String keyword);
 
     int countCoveredEndpointsBySwaggerMappingId(Integer swaggerMappingId);

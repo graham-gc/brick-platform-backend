@@ -1,6 +1,7 @@
 package apiworkflow.swagger;
 
 import apiworkflow.entity.EndpointDefinition;
+import apiworkflow.entity.EndpointSchema;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
@@ -89,9 +90,48 @@ public class SwaggerDocumentParser {
             }
         }
 
+        List<EndpointSchema> schemas = parseSchemas(root, swaggerVersion);
         return new ParsedSwaggerDocument(
-                swaggerVersion, server.protocol, server.host, server.basePath, endpoints
+                swaggerVersion, server.protocol, server.host, server.basePath, endpoints, schemas
         );
+    }
+
+    private List<EndpointSchema> parseSchemas(JSONObject root, String swaggerVersion) {
+        JSONObject schemas;
+        String refPrefix;
+        if ("v2".equals(swaggerVersion)) {
+            schemas = root.getJSONObject("definitions");
+            refPrefix = "#/definitions/";
+        } else {
+            JSONObject components = root.getJSONObject("components");
+            schemas = components == null ? null : components.getJSONObject("schemas");
+            refPrefix = "#/components/schemas/";
+        }
+
+        if (schemas == null || schemas.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<String> schemaNames = new ArrayList<>(schemas.keySet());
+        Collections.sort(schemaNames);
+        List<EndpointSchema> result = new ArrayList<>(schemaNames.size());
+        for (String schemaName : schemaNames) {
+            Object schemaValue = schemas.get(schemaName);
+            if (schemaValue == null) {
+                continue;
+            }
+            EndpointSchema schema = new EndpointSchema();
+            schema.setSchemaName(schemaName);
+            schema.setSchemaRef(refPrefix + escapeJsonPointerToken(schemaName));
+            schema.setSchemaJson(JSON.toJSONString(schemaValue));
+            schema.setIsDeleted(0);
+            result.add(schema);
+        }
+        return result;
+    }
+
+    private String escapeJsonPointerToken(String value) {
+        return value.replace("~", "~0").replace("/", "~1");
     }
 
     private String detectVersion(JSONObject root) {
