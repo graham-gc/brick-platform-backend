@@ -17,6 +17,7 @@
         <result column="sign_config_id" property="signConfigId"/>
         <result column="sign_enabled" property="signEnabled"/>
         <result column="node_type" property="nodeType"/>
+        <result column="join_mode" property="joinMode"/>
         <result column="grpc_endpoint_id" property="grpcEndpointId"/>
         <result column="grpc_discovery_config" property="grpcDiscoveryConfig"/>
         <result column="x" property="x"/>
@@ -49,12 +50,12 @@
         INSERT INTO brick_flow_node (
             flow_id, endpoint_id, timeout_sec, retries, headers_json, payload_json,
             query_params_json, path_vars_json, condition_group_id, token_config_id,
-            sign_config_id, sign_enabled, node_type, grpc_endpoint_id, grpc_discovery_config,
+            sign_config_id, sign_enabled, node_type, join_mode, grpc_endpoint_id, grpc_discovery_config,
             x, y, is_deleted, endpoint_app_config_id, create_by, create_time
         ) VALUES (
             #{flowId}, #{endpointId}, #{timeoutSec}, #{retries}, #{headersJson}, #{payloadJson},
             #{queryParamsJson}, #{pathVarsJson}, #{conditionGroupId}, #{tokenConfigId},
-            #{signConfigId}, #{signEnabled}, #{nodeType}, #{grpcEndpointId}, #{grpcDiscoveryConfig},
+            #{signConfigId}, #{signEnabled}, #{nodeType}, #{joinMode}, #{grpcEndpointId}, #{grpcDiscoveryConfig},
             #{x}, #{y}, #{isDeleted}, #{endpointAppConfigId}, #{createBy}, NOW()
         )
     </insert>
@@ -63,7 +64,7 @@
         INSERT INTO brick_flow_node (
             flow_id, endpoint_id, timeout_sec, retries, headers_json, payload_json,
             query_params_json, path_vars_json, condition_group_id, token_config_id,
-            sign_config_id, sign_enabled, node_type, grpc_endpoint_id, grpc_discovery_config,
+            sign_config_id, sign_enabled, node_type, join_mode, grpc_endpoint_id, grpc_discovery_config,
             x, y, is_deleted, endpoint_app_config_id, create_by, create_time
         ) VALUES
         <foreach collection="list" item="item" separator=",">
@@ -71,7 +72,7 @@
                 #{item.flowId}, #{item.endpointId}, #{item.timeoutSec}, #{item.retries},
                 #{item.headersJson}, #{item.payloadJson}, #{item.queryParamsJson}, #{item.pathVarsJson},
                 #{item.conditionGroupId}, #{item.tokenConfigId}, #{item.signConfigId}, #{item.signEnabled},
-                #{item.nodeType}, #{item.grpcEndpointId}, #{item.grpcDiscoveryConfig},
+                #{item.nodeType}, #{item.joinMode}, #{item.grpcEndpointId}, #{item.grpcDiscoveryConfig},
                 #{item.x}, #{item.y}, #{item.isDeleted}, #{item.endpointAppConfigId},
                 #{item.createBy}, NOW()
             )
@@ -92,6 +93,7 @@
             sign_config_id = #{signConfigId},
             sign_enabled = #{signEnabled},
             node_type = #{nodeType},
+            join_mode = #{joinMode},
             grpc_endpoint_id = #{grpcEndpointId},
             grpc_discovery_config = #{grpcDiscoveryConfig},
             x = #{x},

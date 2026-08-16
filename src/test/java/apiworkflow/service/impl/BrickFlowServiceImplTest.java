@@ -203,6 +203,105 @@ class BrickFlowServiceImplTest {
         verify(runMapper).updateStatusAndDuration(eq(501L), eq("success"), any(Long.class), isNull());
     }
 
+    @Test
+    void executesEveryBranchAndWaitsForAllParentsAtDefaultJoin() {
+        BrickFlow flow = runnableFlow(12, 501L);
+        BrickFlowNode root = node(101L, 1);
+        BrickFlowNode left = node(102L, 2);
+        BrickFlowNode right = node(103L, 3);
+        BrickFlowNode join = node(104L, 4);
+        when(nodeMapper.selectByFlowId(12)).thenReturn(Arrays.asList(join, right, left, root));
+        when(edgeMapper.selectByFlowId(12)).thenReturn(Arrays.asList(
+                edge(301L, 101L, 102L),
+                edge(302L, 101L, 103L),
+                edge(303L, 102L, 104L),
+                edge(304L, 103L, 104L)));
+        mockSuccessfulEndpoints(1, 2, 3, 4);
+
+        BrickFlowRun run = service.runFlow(flow.getId(), "graham", null, 0);
+
+        assertEquals("success", run.getStatus());
+        ArgumentCaptor<BrickFlowNode> executionOrder = ArgumentCaptor.forClass(BrickFlowNode.class);
+        verify(flowHttpExecutor, times(4)).execute(eq(501L), eq(flow), executionOrder.capture(),
+                any(EndpointDefinition.class), isNull(), isNull());
+        assertEquals(Arrays.asList(101L, 102L, 103L, 104L), executionOrder.getAllValues().stream()
+                .map(BrickFlowNode::getId).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    void failedBranchBlocksOnlyItsDependantsAndIndependentBranchContinues() {
+        BrickFlow flow = runnableFlow(12, 501L);
+        BrickFlowNode root = node(101L, 1);
+        BrickFlowNode failing = node(102L, 2);
+        BrickFlowNode healthy = node(103L, 3);
+        BrickFlowNode blocked = node(104L, 4);
+        BrickFlowNode healthyChild = node(105L, 5);
+        when(nodeMapper.selectByFlowId(12)).thenReturn(Arrays.asList(root, failing, healthy, blocked, healthyChild));
+        when(edgeMapper.selectByFlowId(12)).thenReturn(Arrays.asList(
+                edge(301L, 101L, 102L),
+                edge(302L, 101L, 103L),
+                edge(303L, 102L, 104L),
+                edge(304L, 103L, 105L)));
+        mockSuccessfulEndpoints(1, 2, 3, 5);
+        when(flowHttpExecutor.execute(eq(501L), eq(flow), eq(failing), any(EndpointDefinition.class), isNull(), isNull()))
+                .thenReturn(failedRunNode(failing, "upstream failed"));
+
+        BrickFlowRun run = service.runFlow(flow.getId(), "graham", null, 0);
+
+        assertEquals("failed", run.getStatus());
+        verify(flowHttpExecutor).execute(eq(501L), eq(flow), eq(healthyChild),
+                any(EndpointDefinition.class), isNull(), isNull());
+        verify(flowHttpExecutor, times(4)).execute(eq(501L), eq(flow), any(BrickFlowNode.class),
+                any(EndpointDefinition.class), isNull(), isNull());
+        ArgumentCaptor<BrickFlowRunNode> records = ArgumentCaptor.forClass(BrickFlowRunNode.class);
+        verify(runNodeMapper, times(5)).insert(records.capture());
+        BrickFlowRunNode blockedRecord = records.getAllValues().stream()
+                .filter(item -> Long.valueOf(104L).equals(item.getNodeId()))
+                .findFirst().orElseThrow(AssertionError::new);
+        assertEquals("blocked", blockedRecord.getStatus());
+    }
+
+    @Test
+    void anyJoinRunsWhenAtLeastOneParentSucceeds() {
+        BrickFlow flow = runnableFlow(12, 501L);
+        BrickFlowNode successParent = node(101L, 1);
+        BrickFlowNode failedParent = node(102L, 2);
+        BrickFlowNode join = node(103L, 3);
+        join.setJoinMode("ANY");
+        when(nodeMapper.selectByFlowId(12)).thenReturn(Arrays.asList(successParent, failedParent, join));
+        when(edgeMapper.selectByFlowId(12)).thenReturn(Arrays.asList(
+                edge(301L, 101L, 103L), edge(302L, 102L, 103L)));
+        mockSuccessfulEndpoints(1, 2, 3);
+        when(flowHttpExecutor.execute(eq(501L), eq(flow), eq(failedParent), any(EndpointDefinition.class), isNull(), isNull()))
+                .thenReturn(failedRunNode(failedParent, "expected failure"));
+
+        BrickFlowRun run = service.runFlow(flow.getId(), "graham", null, 0);
+
+        assertEquals("failed", run.getStatus());
+        verify(flowHttpExecutor).execute(eq(501L), eq(flow), eq(join),
+                any(EndpointDefinition.class), isNull(), isNull());
+    }
+
+    private BrickFlow runnableFlow(Integer flowId, Long runId) {
+        BrickFlow flow = new BrickFlow();
+        flow.setId(flowId);
+        when(flowMapper.selectById(flowId)).thenReturn(flow);
+        when(runMapper.insert(any(BrickFlowRun.class))).thenAnswer(invocation -> {
+            ((BrickFlowRun) invocation.getArgument(0)).setId(runId);
+            return 1;
+        });
+        return flow;
+    }
+
+    private void mockSuccessfulEndpoints(Integer... endpointIds) {
+        for (Integer endpointId : endpointIds) {
+            when(endpointDefinitionMapper.selectById(endpointId)).thenReturn(endpoint(endpointId));
+        }
+        when(flowHttpExecutor.execute(any(Long.class), any(BrickFlow.class), any(BrickFlowNode.class),
+                any(EndpointDefinition.class), isNull(), isNull()))
+                .thenAnswer(invocation -> successfulRunNode(invocation.getArgument(2)));
+    }
+
     private void assignGeneratedNodeIdsStartingAt(long firstId) {
         AtomicLong sequence = new AtomicLong(firstId);
         when(nodeMapper.insert(any(BrickFlowNode.class))).thenAnswer(invocation -> {
@@ -241,6 +340,14 @@ class BrickFlowServiceImplTest {
         BrickFlowRunNode result = new BrickFlowRunNode();
         result.setNodeId(node.getId());
         result.setStatus("success");
+        return result;
+    }
+
+    private BrickFlowRunNode failedRunNode(BrickFlowNode node, String message) {
+        BrickFlowRunNode result = new BrickFlowRunNode();
+        result.setNodeId(node.getId());
+        result.setStatus("failed");
+        result.setErrorMsg(message);
         return result;
     }
 

@@ -7,6 +7,8 @@
         <result column="flow_id" property="flowId"/>
         <result column="source_node_id" property="sourceNodeId"/>
         <result column="target_node_id" property="targetNodeId"/>
+        <result column="source_handle" property="sourceHandle"/>
+        <result column="target_handle" property="targetHandle"/>
         <result column="edge_type" property="edgeType"/>
         <result column="condition_json" property="conditionJson"/>
         <result column="is_deleted" property="isDeleted"/>
@@ -26,23 +28,23 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO brick_flow_edge (
-            flow_id, source_node_id, target_node_id, edge_type, condition_json,
+            flow_id, source_node_id, target_node_id, source_handle, target_handle, edge_type, condition_json,
             is_deleted, create_by, create_time
         ) VALUES (
-            #{flowId}, #{sourceNodeId}, #{targetNodeId}, #{edgeType}, #{conditionJson},
+            #{flowId}, #{sourceNodeId}, #{targetNodeId}, #{sourceHandle}, #{targetHandle}, #{edgeType}, #{conditionJson},
             #{isDeleted}, #{createBy}, NOW()
         )
     </insert>
 
     <insert id="batchInsert">
         INSERT INTO brick_flow_edge (
-            flow_id, source_node_id, target_node_id, edge_type, condition_json,
+            flow_id, source_node_id, target_node_id, source_handle, target_handle, edge_type, condition_json,
             is_deleted, create_by, create_time
         ) VALUES
         <foreach collection="list" item="item" separator=",">
             (
                 #{item.flowId}, #{item.sourceNodeId}, #{item.targetNodeId},
-                #{item.edgeType}, #{item.conditionJson}, #{item.isDeleted},
+                #{item.sourceHandle}, #{item.targetHandle}, #{item.edgeType}, #{item.conditionJson}, #{item.isDeleted},
                 #{item.createBy}, NOW()
             )
         </foreach>
@@ -52,6 +54,8 @@
         UPDATE brick_flow_edge SET
             source_node_id = #{sourceNodeId},
             target_node_id = #{targetNodeId},
+            source_handle = #{sourceHandle},
+            target_handle = #{targetHandle},
             edge_type = #{edgeType},
             condition_json = #{conditionJson},
             update_by = #{updateBy},

@@ -10,6 +10,8 @@ public class BrickFlowEdge implements Serializable {
     private Integer flowId;
     private Long sourceNodeId;
     private Long targetNodeId;
+    private String sourceHandle;
+    private String targetHandle;
     private String edgeType;
     private String conditionJson;
     private Integer isDeleted;

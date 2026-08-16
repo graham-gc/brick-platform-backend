@@ -20,6 +20,7 @@ public class BrickFlowNode implements Serializable {
     private Long signConfigId;
     private Integer signEnabled;
     private String nodeType;
+    private String joinMode;
     private Integer grpcEndpointId;
     private String grpcDiscoveryConfig;
     private Double x;
