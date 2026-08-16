@@ -21,6 +21,14 @@ public class EndpointSchemaResolver {
             throw new IllegalArgumentException("Schema reference is required");
         }
 
+        return resolveReference(schemaRef, schemasByRef(schemas), new ArrayDeque<String>());
+    }
+
+    public Object resolveValue(List<EndpointSchema> schemas, Object value) {
+        return resolveValue(value, schemasByRef(schemas), new ArrayDeque<String>());
+    }
+
+    private Map<String, Object> schemasByRef(List<EndpointSchema> schemas) {
         Map<String, Object> schemasByRef = new LinkedHashMap<>();
         for (EndpointSchema schema : schemas) {
             if (schema == null || !StringUtils.hasText(schema.getSchemaRef())
@@ -34,8 +42,7 @@ public class EndpointSchemaResolver {
                         "Stored schema is not valid JSON: " + schema.getSchemaRef(), e);
             }
         }
-
-        return resolveReference(schemaRef, schemasByRef, new ArrayDeque<String>());
+        return schemasByRef;
     }
 
     private Object resolveReference(String schemaRef, Map<String, Object> schemasByRef,

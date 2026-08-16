@@ -3,11 +3,16 @@ package apiworkflow.service.impl;
 import apiworkflow.entity.BrickFlow;
 import apiworkflow.entity.BrickFlowEdge;
 import apiworkflow.entity.BrickFlowNode;
+import apiworkflow.entity.BrickFlowRun;
+import apiworkflow.entity.BrickFlowRunNode;
+import apiworkflow.entity.EndpointDefinition;
+import apiworkflow.execution.FlowHttpExecutor;
 import apiworkflow.mapper.BrickFlowEdgeMapper;
 import apiworkflow.mapper.BrickFlowMapper;
 import apiworkflow.mapper.BrickFlowNodeMapper;
 import apiworkflow.mapper.BrickFlowRunMapper;
 import apiworkflow.mapper.BrickFlowRunNodeMapper;
+import apiworkflow.mapper.EndpointDefinitionMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +29,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,6 +52,12 @@ class BrickFlowServiceImplTest {
     @Mock
     private BrickFlowRunNodeMapper runNodeMapper;
 
+    @Mock
+    private EndpointDefinitionMapper endpointDefinitionMapper;
+
+    @Mock
+    private FlowHttpExecutor flowHttpExecutor;
+
     private BrickFlowServiceImpl service;
 
     @BeforeEach
@@ -55,6 +68,8 @@ class BrickFlowServiceImplTest {
         ReflectionTestUtils.setField(service, "edgeMapper", edgeMapper);
         ReflectionTestUtils.setField(service, "runMapper", runMapper);
         ReflectionTestUtils.setField(service, "runNodeMapper", runNodeMapper);
+        ReflectionTestUtils.setField(service, "endpointDefinitionMapper", endpointDefinitionMapper);
+        ReflectionTestUtils.setField(service, "flowHttpExecutor", flowHttpExecutor);
     }
 
     @Test
@@ -152,6 +167,42 @@ class BrickFlowServiceImplTest {
         assertEquals(Long.valueOf(202L), copiedEdge.getTargetNodeId());
     }
 
+    @Test
+    void executesNodesInTopologicalOrderAndCompletesRun() {
+        BrickFlow flow = new BrickFlow();
+        flow.setId(12);
+        when(flowMapper.selectById(12)).thenReturn(flow);
+        when(runMapper.insert(any(BrickFlowRun.class))).thenAnswer(invocation -> {
+            ((BrickFlowRun) invocation.getArgument(0)).setId(501L);
+            return 1;
+        });
+
+        BrickFlowNode first = node(101L, 1);
+        BrickFlowNode second = node(102L, 2);
+        when(nodeMapper.selectByFlowId(12)).thenReturn(Arrays.asList(second, first));
+        when(edgeMapper.selectByFlowId(12)).thenReturn(
+                Collections.singletonList(edge(301L, 101L, 102L)));
+
+        EndpointDefinition firstEndpoint = endpoint(1);
+        EndpointDefinition secondEndpoint = endpoint(2);
+        when(endpointDefinitionMapper.selectById(1)).thenReturn(firstEndpoint);
+        when(endpointDefinitionMapper.selectById(2)).thenReturn(secondEndpoint);
+        when(flowHttpExecutor.execute(eq(501L), eq(flow), any(BrickFlowNode.class),
+                any(EndpointDefinition.class), isNull(), isNull()))
+                .thenAnswer(invocation -> successfulRunNode(invocation.getArgument(2)));
+
+        BrickFlowRun run = service.runFlow(12, "graham", null, 0);
+
+        assertEquals("success", run.getStatus());
+        ArgumentCaptor<BrickFlowNode> executionOrder = ArgumentCaptor.forClass(BrickFlowNode.class);
+        verify(flowHttpExecutor, times(2)).execute(eq(501L), eq(flow), executionOrder.capture(),
+                any(EndpointDefinition.class), isNull(), isNull());
+        assertEquals(Long.valueOf(101L), executionOrder.getAllValues().get(0).getId());
+        assertEquals(Long.valueOf(102L), executionOrder.getAllValues().get(1).getId());
+        verify(runNodeMapper, times(2)).insert(any(BrickFlowRunNode.class));
+        verify(runMapper).updateStatusAndDuration(eq(501L), eq("success"), any(Long.class), isNull());
+    }
+
     private void assignGeneratedNodeIdsStartingAt(long firstId) {
         AtomicLong sequence = new AtomicLong(firstId);
         when(nodeMapper.insert(any(BrickFlowNode.class))).thenAnswer(invocation -> {
@@ -175,6 +226,22 @@ class BrickFlowServiceImplTest {
         edge.setSourceNodeId(sourceNodeId);
         edge.setTargetNodeId(targetNodeId);
         return edge;
+    }
+
+    private EndpointDefinition endpoint(Integer id) {
+        EndpointDefinition endpoint = new EndpointDefinition();
+        endpoint.setId(id);
+        endpoint.setHttpMethod("GET");
+        endpoint.setFullUrl("http://localhost/endpoint-" + id);
+        endpoint.setIsDeleted(0);
+        return endpoint;
+    }
+
+    private BrickFlowRunNode successfulRunNode(BrickFlowNode node) {
+        BrickFlowRunNode result = new BrickFlowRunNode();
+        result.setNodeId(node.getId());
+        result.setStatus("success");
+        return result;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

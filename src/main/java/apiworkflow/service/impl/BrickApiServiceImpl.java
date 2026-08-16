@@ -238,6 +238,23 @@ public class BrickApiServiceImpl implements IBrickApiService {
         EndpointDefinition endpoint = endpointDefinitionMapper.selectById(endpointId);
         Map<String, Object> result = new HashMap<>();
         result.put("endpoint", endpoint);
+        if (endpoint == null || !StringUtils.hasText(endpoint.getRequestDefinitionJson())) {
+            result.put("requestDefinition", null);
+            result.put("resolvedRequestDefinition", null);
+            return result;
+        }
+
+        Object requestDefinition;
+        try {
+            requestDefinition = com.alibaba.fastjson.JSON.parse(endpoint.getRequestDefinitionJson());
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Stored request definition is not valid JSON for endpoint " + endpointId, e);
+        }
+        List<EndpointSchema> schemas = endpointSchemaMapper
+                .selectBySwaggerMappingId(endpoint.getSwaggerMappingId());
+        result.put("requestDefinition", requestDefinition);
+        result.put("resolvedRequestDefinition", endpointSchemaResolver.resolveValue(schemas, requestDefinition));
         return result;
     }
 

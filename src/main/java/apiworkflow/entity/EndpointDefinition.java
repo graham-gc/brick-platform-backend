@@ -24,6 +24,7 @@ public class EndpointDefinition implements Serializable {
     private String swaggerVersion;
     private String consumesTypes;
     private String producesTypes;
+    private String requestDefinitionJson;
     private String swaggerUrl;
     private String docChecksum;
     private Integer isLightweight;

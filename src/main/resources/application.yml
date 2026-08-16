@@ -26,3 +26,8 @@ logging:
   level:
     apiworkflow: DEBUG
     org.springframework: INFO
+
+brick:
+  mock-commerce:
+    enabled: true
+    port: 9090

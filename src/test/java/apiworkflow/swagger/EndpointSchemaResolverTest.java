@@ -71,6 +71,28 @@ class EndpointSchemaResolverTest {
         assertTrue(error.getMessage().contains("#/definitions/Missing"));
     }
 
+    @Test
+    void resolvesReferencesInsideAnEndpointRequestDefinition() {
+        EndpointSchema address = schema("#/components/schemas/Address",
+                "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}");
+        EndpointSchema request = schema("#/components/schemas/CreateRequest",
+                "{\"type\":\"object\",\"properties\":{\"address\":{\"$ref\":\"#/components/schemas/Address\"}}}");
+        Object definition = com.alibaba.fastjson.JSON.parse(
+                "{\"requestBody\":{\"schema\":{\"$ref\":\"#/components/schemas/CreateRequest\"}}}");
+
+        Object resolved = resolver.resolveValue(Arrays.asList(address, request), definition);
+
+        assertFalse(containsRef(resolved));
+        assertEquals("string", ((JSONObject) resolved)
+                .getJSONObject("requestBody")
+                .getJSONObject("schema")
+                .getJSONObject("properties")
+                .getJSONObject("address")
+                .getJSONObject("properties")
+                .getJSONObject("city")
+                .getString("type"));
+    }
+
     private EndpointSchema schema(String ref, String json) {
         EndpointSchema schema = new EndpointSchema();
         schema.setSchemaRef(ref);

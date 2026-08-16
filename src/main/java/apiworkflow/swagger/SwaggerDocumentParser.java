@@ -15,6 +15,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -83,6 +84,8 @@ public class SwaggerDocumentParser {
                 endpoint.setProducesTypes("v2".equals(swaggerVersion)
                         ? swagger2Produces(root, operation)
                         : openApi3Produces(root, operation));
+                endpoint.setRequestDefinitionJson(JSON.toJSONString(
+                        parseRequestDefinition(root, swaggerVersion, pathItem, operation)));
                 endpoint.setDocChecksum(checksum(swaggerVersion, server, endpointPath, method, operation));
                 endpoint.setIsLightweight(0);
                 endpoint.setIsDeleted(0);
@@ -254,6 +257,175 @@ public class SwaggerDocumentParser {
         List<String> sorted = new ArrayList<>(contentTypes);
         Collections.sort(sorted);
         return sorted.isEmpty() ? null : String.join(",", sorted);
+    }
+
+    private JSONObject parseRequestDefinition(JSONObject root, String swaggerVersion,
+                                              JSONObject pathItem, JSONObject operation) {
+        Map<String, JSONObject> parameters = new LinkedHashMap<>();
+        collectParameters(root, pathItem.getJSONArray("parameters"), parameters);
+        collectParameters(root, operation.getJSONArray("parameters"), parameters);
+
+        JSONObject definition = new JSONObject(true);
+        JSONArray headers = new JSONArray();
+        JSONArray queryParameters = new JSONArray();
+        JSONArray pathParameters = new JSONArray();
+        JSONArray cookieParameters = new JSONArray();
+        JSONArray formParameters = new JSONArray();
+        JSONObject requestBody = null;
+
+        for (JSONObject parameter : parameters.values()) {
+            String location = parameter.getString("in");
+            if ("body".equals(location)) {
+                requestBody = swagger2RequestBody(root, operation, parameter);
+                continue;
+            }
+
+            JSONObject normalised = normaliseParameter(parameter);
+            if ("header".equals(location)) {
+                headers.add(normalised);
+            } else if ("query".equals(location)) {
+                queryParameters.add(normalised);
+            } else if ("path".equals(location)) {
+                pathParameters.add(normalised);
+            } else if ("cookie".equals(location)) {
+                cookieParameters.add(normalised);
+            } else if ("formData".equals(location)) {
+                formParameters.add(normalised);
+            }
+        }
+
+        if (!"v2".equals(swaggerVersion)) {
+            requestBody = openApi3RequestBody(root, operation);
+        }
+        definition.put("headers", headers);
+        definition.put("queryParameters", queryParameters);
+        definition.put("pathParameters", pathParameters);
+        definition.put("cookieParameters", cookieParameters);
+        definition.put("formParameters", formParameters);
+        if (requestBody != null) {
+            definition.put("requestBody", requestBody);
+        }
+        return definition;
+    }
+
+    private void collectParameters(JSONObject root, JSONArray source,
+                                   Map<String, JSONObject> target) {
+        if (source == null) {
+            return;
+        }
+        for (int index = 0; index < source.size(); index++) {
+            JSONObject parameter = resolveObject(root, source.getJSONObject(index));
+            if (parameter == null || !StringUtils.hasText(parameter.getString("name"))
+                    || !StringUtils.hasText(parameter.getString("in"))) {
+                continue;
+            }
+            target.put(parameter.getString("in") + "\n" + parameter.getString("name"), parameter);
+        }
+    }
+
+    private JSONObject normaliseParameter(JSONObject parameter) {
+        JSONObject result = new JSONObject(true);
+        result.put("name", parameter.getString("name"));
+        result.put("in", parameter.getString("in"));
+        result.put("required", Boolean.TRUE.equals(parameter.getBoolean("required")));
+        if (parameter.get("description") != null) {
+            result.put("description", parameter.get("description"));
+        }
+
+        JSONObject schema = parameter.getJSONObject("schema");
+        if (schema == null) {
+            schema = inlineSwagger2ParameterSchema(parameter);
+        }
+        result.put("schema", schema);
+        Object example = parameter.get("example");
+        if (example == null && schema != null) {
+            example = schema.containsKey("example") ? schema.get("example") : schema.get("default");
+        }
+        if (example != null) {
+            result.put("example", example);
+        }
+        return result;
+    }
+
+    private JSONObject inlineSwagger2ParameterSchema(JSONObject parameter) {
+        JSONObject schema = new JSONObject(true);
+        for (String field : Arrays.asList(
+                "type", "format", "items", "enum", "default", "minimum", "maximum",
+                "minLength", "maxLength", "pattern")) {
+            if (parameter.containsKey(field)) {
+                schema.put(field, parameter.get(field));
+            }
+        }
+        return schema;
+    }
+
+    private JSONObject swagger2RequestBody(JSONObject root, JSONObject operation,
+                                           JSONObject parameter) {
+        JSONObject body = new JSONObject(true);
+        body.put("required", Boolean.TRUE.equals(parameter.getBoolean("required")));
+        body.put("contentType", firstCsvValue(swagger2Consumes(root, operation)));
+        if (parameter.get("description") != null) {
+            body.put("description", parameter.get("description"));
+        }
+        JSONObject schema = parameter.getJSONObject("schema");
+        if (schema != null) {
+            body.put("schema", schema);
+            if (schema.get("example") != null) {
+                body.put("example", schema.get("example"));
+            }
+        }
+        return body;
+    }
+
+    private JSONObject openApi3RequestBody(JSONObject root, JSONObject operation) {
+        JSONObject source = resolveObject(root, operation.getJSONObject("requestBody"));
+        if (source == null) {
+            return null;
+        }
+        JSONObject content = source.getJSONObject("content");
+        String contentType = preferredContentType(content);
+        JSONObject mediaType = contentType == null ? null : content.getJSONObject(contentType);
+
+        JSONObject body = new JSONObject(true);
+        body.put("required", Boolean.TRUE.equals(source.getBoolean("required")));
+        body.put("contentType", contentType);
+        if (source.get("description") != null) {
+            body.put("description", source.get("description"));
+        }
+        if (mediaType != null) {
+            JSONObject schema = mediaType.getJSONObject("schema");
+            if (schema != null) {
+                body.put("schema", schema);
+            }
+            Object example = mediaType.get("example");
+            if (example == null && schema != null) {
+                example = schema.get("example");
+            }
+            if (example != null) {
+                body.put("example", example);
+            }
+        }
+        return body;
+    }
+
+    private String preferredContentType(JSONObject content) {
+        if (content == null || content.isEmpty()) {
+            return null;
+        }
+        if (content.containsKey("application/json")) {
+            return "application/json";
+        }
+        List<String> contentTypes = new ArrayList<>(content.keySet());
+        Collections.sort(contentTypes);
+        return contentTypes.get(0);
+    }
+
+    private String firstCsvValue(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        int comma = value.indexOf(',');
+        return comma < 0 ? value : value.substring(0, comma);
     }
 
     private JSONObject resolveObject(JSONObject root, JSONObject object) {

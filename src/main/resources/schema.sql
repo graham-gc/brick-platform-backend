@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS brick_endpoint_definition (
     swagger_version VARCHAR(10),
     consumes_types VARCHAR(200),
     produces_types VARCHAR(200),
+    request_definition_json LONGTEXT,
     swagger_url VARCHAR(500),
     doc_checksum VARCHAR(100),
     is_lightweight TINYINT DEFAULT 0,

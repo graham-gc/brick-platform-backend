@@ -3,6 +3,7 @@ package apiworkflow.swagger;
 import apiworkflow.entity.EndpointDefinition;
 import apiworkflow.entity.EndpointSchema;
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -41,6 +42,16 @@ class SwaggerDocumentParserTest {
         assertEquals(Integer.valueOf(0), createOrder.getDeprecated());
         assertNotNull(createOrder.getDocChecksum());
         assertEquals(64, createOrder.getDocChecksum().length());
+        JSONObject createOrderRequest = JSON.parseObject(createOrder.getRequestDefinitionJson());
+        assertEquals("X-Request-Id", createOrderRequest.getJSONArray("headers")
+                .getJSONObject(0).getString("name"));
+        assertEquals("req-0001", createOrderRequest.getJSONArray("headers")
+                .getJSONObject(0).getString("example"));
+        assertEquals("#/components/schemas/CreateOrderRequest",
+                createOrderRequest.getJSONObject("requestBody")
+                        .getJSONObject("schema").getString("$ref"));
+        assertEquals("usr-1001", createOrderRequest.getJSONObject("requestBody")
+                .getJSONObject("example").getString("customerId"));
 
         assertEquals(20, document.getSchemas().size());
         EndpointSchema createOrderSchema = schema(document, "CreateOrderRequest");
@@ -70,6 +81,11 @@ class SwaggerDocumentParserTest {
         EndpointDefinition createUser = endpoint(document, "POST", "/users");
         assertEquals("application/json", createUser.getConsumesTypes());
         assertEquals("application/json", createUser.getProducesTypes());
+        assertEquals("#/definitions/UserCreate",
+                JSON.parseObject(createUser.getRequestDefinitionJson())
+                        .getJSONObject("requestBody")
+                        .getJSONObject("schema")
+                        .getString("$ref"));
     }
 
     @Test

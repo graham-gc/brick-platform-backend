@@ -31,7 +31,22 @@
     </select>
 
     <select id="selectRunsBySwaggerMappingId" resultType="map">
-        SELECT r.*, f.name as flow_name
+        SELECT r.id,
+               r.flow_id AS flowId,
+               r.status,
+               r.triggered_by AS triggeredBy,
+               r.run_type AS runType,
+               r.duration_ms AS durationMs,
+               r.error_msg AS errorMsg,
+               r.override_base_url AS overrideBaseUrl,
+               r.start_time AS startTime,
+               r.end_time AS endTime,
+               r.suite_run_id AS suiteRunId,
+               r.batch_id AS batchId,
+               r.remark,
+               r.create_by AS createBy,
+               r.create_time AS createTime,
+               f.name AS flowName
         FROM brick_flow_run r
         INNER JOIN brick_flow f ON r.flow_id = f.id
         WHERE f.swagger_mapping_id = #{swaggerMappingId} AND f.is_deleted = 0
@@ -49,14 +64,56 @@
         LIMIT #{offset}, #{limit}
     </select>
 
+    <select id="countRunsBySwaggerMappingId" resultType="int">
+        SELECT
+        <choose>
+            <when test="distinctLatest">COUNT(DISTINCT r.flow_id)</when>
+            <otherwise>COUNT(*)</otherwise>
+        </choose>
+        FROM brick_flow_run r
+        INNER JOIN brick_flow f ON r.flow_id = f.id
+        WHERE f.swagger_mapping_id = #{swaggerMappingId} AND f.is_deleted = 0
+        <if test="flowName != null">AND f.name LIKE CONCAT('%', #{flowName}, '%')</if>
+        <if test="status != null">AND r.status = #{status}</if>
+        <if test="startDate != null">AND r.start_time &gt;= #{startDate}</if>
+        <if test="endDate != null">AND r.start_time &lt;= #{endDate}</if>
+        <if test="testSuiteRunId != null">AND r.suite_run_id = #{testSuiteRunId}</if>
+        <if test="batchId != null">AND r.batch_id = #{batchId}</if>
+        <if test="runType != null">AND r.run_type = #{runType}</if>
+    </select>
+
     <select id="selectRunsByFlowId" resultType="map">
-        SELECT * FROM brick_flow_run
+        SELECT id,
+               flow_id AS flowId,
+               status,
+               triggered_by AS triggeredBy,
+               run_type AS runType,
+               duration_ms AS durationMs,
+               error_msg AS errorMsg,
+               override_base_url AS overrideBaseUrl,
+               start_time AS startTime,
+               end_time AS endTime,
+               suite_run_id AS suiteRunId,
+               batch_id AS batchId,
+               remark,
+               create_by AS createBy,
+               create_time AS createTime
+        FROM brick_flow_run
         WHERE flow_id = #{flowId}
         <if test="status != null">AND status = #{status}</if>
         <if test="startDate != null">AND start_time &gt;= #{startDate}</if>
         <if test="endDate != null">AND start_time &lt;= #{endDate}</if>
         ORDER BY start_time DESC
         LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countRunsByFlowId" resultType="int">
+        SELECT COUNT(*)
+        FROM brick_flow_run
+        WHERE flow_id = #{flowId}
+        <if test="status != null">AND status = #{status}</if>
+        <if test="startDate != null">AND start_time &gt;= #{startDate}</if>
+        <if test="endDate != null">AND start_time &lt;= #{endDate}</if>
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">

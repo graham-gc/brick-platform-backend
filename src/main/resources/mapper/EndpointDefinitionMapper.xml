@@ -21,6 +21,7 @@
         <result column="swagger_version" property="swaggerVersion"/>
         <result column="consumes_types" property="consumesTypes"/>
         <result column="produces_types" property="producesTypes"/>
+        <result column="request_definition_json" property="requestDefinitionJson"/>
         <result column="swagger_url" property="swaggerUrl"/>
         <result column="doc_checksum" property="docChecksum"/>
         <result column="is_lightweight" property="isLightweight"/>
@@ -117,12 +118,12 @@
         INSERT INTO brick_endpoint_definition (
             env, swagger_mapping_id, app_config_id, protocol, host, base_path,
             endpoint_path, full_url, http_method, operation_id, summary, description,
-            tags, deprecated, swagger_version, consumes_types, produces_types,
+            tags, deprecated, swagger_version, consumes_types, produces_types, request_definition_json,
             swagger_url, doc_checksum, is_lightweight, is_deleted, create_by, create_time
         ) VALUES (
             #{env}, #{swaggerMappingId}, #{appConfigId}, #{protocol}, #{host}, #{basePath},
             #{endpointPath}, #{fullUrl}, #{httpMethod}, #{operationId}, #{summary}, #{description},
-            #{tags}, #{deprecated}, #{swaggerVersion}, #{consumesTypes}, #{producesTypes},
+            #{tags}, #{deprecated}, #{swaggerVersion}, #{consumesTypes}, #{producesTypes}, #{requestDefinitionJson},
             #{swaggerUrl}, #{docChecksum}, #{isLightweight}, #{isDeleted}, #{createBy}, NOW()
         )
     </insert>
@@ -131,14 +132,14 @@
         INSERT INTO brick_endpoint_definition (
             env, swagger_mapping_id, app_config_id, protocol, host, base_path,
             endpoint_path, full_url, http_method, operation_id, summary, description,
-            tags, deprecated, swagger_version, consumes_types, produces_types,
+            tags, deprecated, swagger_version, consumes_types, produces_types, request_definition_json,
             swagger_url, doc_checksum, is_lightweight, is_deleted, create_by, create_time
         ) VALUES
         <foreach collection="list" item="item" separator=",">
             (
                 #{item.env}, #{item.swaggerMappingId}, #{item.appConfigId}, #{item.protocol}, #{item.host}, #{item.basePath},
                 #{item.endpointPath}, #{item.fullUrl}, #{item.httpMethod}, #{item.operationId}, #{item.summary}, #{item.description},
-                #{item.tags}, #{item.deprecated}, #{item.swaggerVersion}, #{item.consumesTypes}, #{item.producesTypes},
+                #{item.tags}, #{item.deprecated}, #{item.swaggerVersion}, #{item.consumesTypes}, #{item.producesTypes}, #{item.requestDefinitionJson},
                 #{item.swaggerUrl}, #{item.docChecksum}, #{item.isLightweight}, #{item.isDeleted}, #{item.createBy}, NOW()
             )
         </foreach>
@@ -148,7 +149,7 @@
         INSERT INTO brick_endpoint_definition (
             env, swagger_mapping_id, app_config_id, protocol, host, base_path,
             endpoint_path, full_url, http_method, operation_id, summary, description,
-            tags, deprecated, swagger_version, consumes_types, produces_types,
+            tags, deprecated, swagger_version, consumes_types, produces_types, request_definition_json,
             swagger_url, doc_checksum, is_lightweight, is_deleted,
             create_by, update_by, create_time, update_time
         ) VALUES
@@ -156,7 +157,7 @@
             (
                 #{item.env}, #{item.swaggerMappingId}, #{item.appConfigId}, #{item.protocol}, #{item.host}, #{item.basePath},
                 #{item.endpointPath}, #{item.fullUrl}, #{item.httpMethod}, #{item.operationId}, #{item.summary}, #{item.description},
-                #{item.tags}, #{item.deprecated}, #{item.swaggerVersion}, #{item.consumesTypes}, #{item.producesTypes},
+                #{item.tags}, #{item.deprecated}, #{item.swaggerVersion}, #{item.consumesTypes}, #{item.producesTypes}, #{item.requestDefinitionJson},
                 #{item.swaggerUrl}, #{item.docChecksum}, #{item.isLightweight}, 0,
                 #{item.createBy}, #{item.updateBy}, NOW(), NOW()
             )
@@ -176,6 +177,7 @@
             swagger_version = VALUES(swagger_version),
             consumes_types = VALUES(consumes_types),
             produces_types = VALUES(produces_types),
+            request_definition_json = VALUES(request_definition_json),
             swagger_url = VALUES(swagger_url),
             doc_checksum = VALUES(doc_checksum),
             is_lightweight = VALUES(is_lightweight),
@@ -200,6 +202,7 @@
             swagger_version = #{swaggerVersion},
             consumes_types = #{consumesTypes},
             produces_types = #{producesTypes},
+            request_definition_json = #{requestDefinitionJson},
             swagger_url = #{swaggerUrl},
             doc_checksum = #{docChecksum},
             is_lightweight = #{isLightweight},

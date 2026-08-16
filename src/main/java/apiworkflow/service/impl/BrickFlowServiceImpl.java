@@ -2,6 +2,7 @@ package apiworkflow.service.impl;
 
 import apiworkflow.dto.BrickFlowFullNode;
 import apiworkflow.entity.*;
+import apiworkflow.execution.FlowHttpExecutor;
 import apiworkflow.mapper.*;
 import apiworkflow.service.IBrickFlowService;
 import com.alibaba.fastjson.JSON;
@@ -30,6 +31,12 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
 
     @Autowired
     private BrickFlowRunNodeMapper runNodeMapper;
+
+    @Autowired
+    private EndpointDefinitionMapper endpointDefinitionMapper;
+
+    @Autowired
+    private FlowHttpExecutor flowHttpExecutor;
 
     @Override
     public BrickFlow getFlow(Integer id) {
@@ -292,18 +299,144 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
             throw new RuntimeException("Flow not found: " + id);
         }
 
+        String runOperator = StringUtils.hasText(operator) ? operator : "system";
         BrickFlowRun run = new BrickFlowRun();
         run.setFlowId(id);
         run.setStatus("running");
-        run.setTriggeredBy(operator);
+        run.setTriggeredBy(runOperator);
         run.setRunType(runType != null ? runType : 0);
         run.setOverrideBaseUrl(overrideBaseUrl);
         run.setSuiteRunId(suiteRunId);
         run.setStartTime(new Date());
-        run.setCreateBy(operator);
+        run.setCreateBy(runOperator);
         runMapper.insert(run);
+        if (run.getId() == null) {
+            throw new IllegalStateException("Database did not return an id for the flow run");
+        }
 
+        String finalStatus = "success";
+        String errorMessage = null;
+        try {
+            List<BrickFlowNode> orderedNodes = topologicalOrder(
+                    nodeMapper.selectByFlowId(id), edgeMapper.selectByFlowId(id));
+            if (orderedNodes.isEmpty()) {
+                throw new IllegalStateException("Flow has no executable nodes");
+            }
+
+            for (BrickFlowNode node : orderedNodes) {
+                BrickFlowRunNode runNode;
+                if (!"http".equalsIgnoreCase(valueOrDefault(node.getNodeType(), "http"))) {
+                    runNode = failedRunNode(run.getId(), node, "Unsupported node type: " + node.getNodeType());
+                } else if (node.getEndpointId() == null) {
+                    runNode = failedRunNode(run.getId(), node, "HTTP node has no endpoint id");
+                } else {
+                    EndpointDefinition endpoint = endpointDefinitionMapper.selectById(node.getEndpointId());
+                    if (endpoint == null || Integer.valueOf(1).equals(endpoint.getIsDeleted())) {
+                        runNode = failedRunNode(run.getId(), node,
+                                "Endpoint not found or deleted: " + node.getEndpointId());
+                    } else {
+                        runNode = flowHttpExecutor.execute(
+                                run.getId(), flow, node, endpoint, overrideBaseUrl, customHeaders);
+                    }
+                }
+                runNodeMapper.insert(runNode);
+                if (!"success".equals(runNode.getStatus())) {
+                    finalStatus = "failed";
+                    errorMessage = "Node " + node.getId() + " failed: " + runNode.getErrorMsg();
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            finalStatus = "failed";
+            errorMessage = rootMessage(e);
+        }
+
+        Date endTime = new Date();
+        long durationMs = endTime.getTime() - run.getStartTime().getTime();
+        runMapper.updateStatusAndDuration(run.getId(), finalStatus, durationMs, errorMessage);
+        run.setStatus(finalStatus);
+        run.setDurationMs(durationMs);
+        run.setErrorMsg(errorMessage);
+        run.setEndTime(endTime);
         return run;
+    }
+
+    private List<BrickFlowNode> topologicalOrder(List<BrickFlowNode> nodes, List<BrickFlowEdge> edges) {
+        Map<Long, BrickFlowNode> nodesById = new HashMap<>();
+        Map<Long, Integer> incomingCount = new HashMap<>();
+        Map<Long, List<Long>> outgoing = new HashMap<>();
+        for (BrickFlowNode node : nodes == null ? Collections.<BrickFlowNode>emptyList() : nodes) {
+            if (node.getId() == null) {
+                throw new IllegalStateException("Persisted flow node has no id");
+            }
+            nodesById.put(node.getId(), node);
+            incomingCount.put(node.getId(), 0);
+            outgoing.put(node.getId(), new ArrayList<Long>());
+        }
+        for (BrickFlowEdge edge : edges == null ? Collections.<BrickFlowEdge>emptyList() : edges) {
+            Long source = edge.getSourceNodeId();
+            Long target = edge.getTargetNodeId();
+            if (!nodesById.containsKey(source) || !nodesById.containsKey(target)) {
+                throw new IllegalStateException("Flow edge references a missing node");
+            }
+            outgoing.get(source).add(target);
+            incomingCount.put(target, incomingCount.get(target) + 1);
+        }
+
+        PriorityQueue<Long> ready = new PriorityQueue<>();
+        for (Map.Entry<Long, Integer> entry : incomingCount.entrySet()) {
+            if (entry.getValue() == 0) {
+                ready.add(entry.getKey());
+            }
+        }
+
+        List<BrickFlowNode> ordered = new ArrayList<>(nodesById.size());
+        while (!ready.isEmpty()) {
+            Long nodeId = ready.poll();
+            ordered.add(nodesById.get(nodeId));
+            for (Long target : outgoing.get(nodeId)) {
+                int remaining = incomingCount.get(target) - 1;
+                incomingCount.put(target, remaining);
+                if (remaining == 0) {
+                    ready.add(target);
+                }
+            }
+        }
+        if (ordered.size() != nodesById.size()) {
+            throw new IllegalStateException("Flow contains a cycle");
+        }
+        return ordered;
+    }
+
+    private BrickFlowRunNode failedRunNode(Long runId, BrickFlowNode node, String errorMessage) {
+        Date now = new Date();
+        BrickFlowRunNode runNode = new BrickFlowRunNode();
+        runNode.setRunId(runId);
+        runNode.setNodeId(node.getId());
+        runNode.setEndpointId(node.getEndpointId());
+        runNode.setGrpcEndpointId(node.getGrpcEndpointId());
+        runNode.setStatus("failed");
+        runNode.setStartTime(now);
+        runNode.setEndTime(now);
+        runNode.setDurationMs(0L);
+        runNode.setErrorMsg(errorMessage);
+        runNode.setAssertionTotalCount(0);
+        runNode.setAssertionPassedCount(0);
+        runNode.setAssertionFailedCount(0);
+        return runNode;
+    }
+
+    private String valueOrDefault(String value, String defaultValue) {
+        return StringUtils.hasText(value) ? value : defaultValue;
+    }
+
+    private String rootMessage(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return StringUtils.hasText(current.getMessage())
+                ? current.getMessage() : current.getClass().getSimpleName();
     }
 
     @Override

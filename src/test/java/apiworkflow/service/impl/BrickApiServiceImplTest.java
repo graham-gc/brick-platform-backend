@@ -9,6 +9,9 @@ import apiworkflow.mapper.EndpointDefinitionMapper;
 import apiworkflow.mapper.EndpointSchemaMapper;
 import apiworkflow.mapper.SwaggerSyncLogMapper;
 import apiworkflow.swagger.SwaggerDocumentParser;
+import apiworkflow.swagger.EndpointSchemaResolver;
+import apiworkflow.swagger.ParsedSwaggerDocument;
+import com.alibaba.fastjson.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +27,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -61,6 +65,7 @@ class BrickApiServiceImplTest {
         ReflectionTestUtils.setField(service, "endpointSchemaMapper", endpointSchemaMapper);
         ReflectionTestUtils.setField(service, "swaggerSyncLogMapper", swaggerSyncLogMapper);
         ReflectionTestUtils.setField(service, "swaggerDocumentParser", parser);
+        ReflectionTestUtils.setField(service, "endpointSchemaResolver", new EndpointSchemaResolver());
     }
 
     @Test
@@ -129,6 +134,33 @@ class BrickApiServiceImplTest {
         assertEquals(Integer.valueOf(7), log.getInterfacesAdded());
         assertEquals(Integer.valueOf(0), log.getInterfacesUpdated());
         assertEquals(Integer.valueOf(1), log.getInterfacesDeleted());
+    }
+
+    @Test
+    void endpointDetailReturnsRawAndRecursivelyResolvedRequestDefinitions() {
+        ParsedSwaggerDocument document = parser.parse(swaggerJson, null, null);
+        EndpointDefinition endpoint = document.getEndpoints().stream()
+                .filter(item -> "POST".equals(item.getHttpMethod()) && "/orders".equals(item.getEndpointPath()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Create order endpoint not found"));
+        endpoint.setId(18);
+        endpoint.setSwaggerMappingId(7);
+        when(endpointDefinitionMapper.selectById(18)).thenReturn(endpoint);
+        when(endpointSchemaMapper.selectBySwaggerMappingId(7)).thenReturn(document.getSchemas());
+
+        Map<String, Object> detail = service.getEndpointDetail(18);
+
+        assertTrue(detail.get("requestDefinition") instanceof JSONObject);
+        JSONObject resolved = (JSONObject) detail.get("resolvedRequestDefinition");
+        assertEquals("object", resolved.getJSONObject("requestBody")
+                .getJSONObject("schema").getString("type"));
+        assertEquals("string", resolved.getJSONObject("requestBody")
+                .getJSONObject("schema")
+                .getJSONObject("properties")
+                .getJSONObject("deliveryAddress")
+                .getJSONObject("properties")
+                .getJSONObject("city")
+                .getString("type"));
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
