@@ -64,6 +64,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     @Override
     @Transactional
     public int createFlow(BrickFlow flow, List<BrickFlowNode> nodes, List<BrickFlowEdge> edges, String operator) {
+        flowContextEngine.validateSharedHeaderVariables(flow.getSharedHeadersJson(), nodes);
         flow.setIsDeleted(0);
         flow.setCreateBy(operator);
         int result = flowMapper.insert(flow);
@@ -77,6 +78,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     @Override
     @Transactional
     public int createFullFlow(BrickFlow flow, List<BrickFlowFullNode> fullNodes, List<BrickFlowEdge> edges, String operator) {
+        flowContextEngine.validateSharedHeaderVariables(flow.getSharedHeadersJson(), fullNodes);
         flow.setIsDeleted(0);
         flow.setCreateBy(operator);
         int result = flowMapper.insert(flow);
@@ -97,6 +99,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
             throw new IllegalArgumentException("Flow id is required when updating a flow");
         }
 
+        flowContextEngine.validateSharedHeaderVariables(flow.getSharedHeadersJson(), nodes);
         flow.setUpdateBy(operator);
         int result = flowMapper.updateById(flow);
 
@@ -389,7 +392,10 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
                 } else {
                     try {
                         flowContextEngine.applyBindings(node, context);
-                        runNode = executeNode(runId, flow, node, overrideBaseUrl, customHeaders);
+                        String effectiveSharedHeaders = flowContextEngine.resolveSharedHeaders(
+                                flow.getSharedHeadersJson(), context);
+                        runNode = executeNode(runId, flow, node, overrideBaseUrl,
+                                customHeaders, effectiveSharedHeaders);
                         if ("success".equalsIgnoreCase(runNode.getStatus())) {
                             flowContextEngine.captureResponseVariables(node, runNode.getFullResponse(), context);
                         }
@@ -448,7 +454,8 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     }
 
     private BrickFlowRunNode executeNode(Long runId, BrickFlow flow, BrickFlowNode node,
-                                         String overrideBaseUrl, Map<String, String> customHeaders) {
+                                         String overrideBaseUrl, Map<String, String> customHeaders,
+                                         String effectiveSharedHeadersJson) {
         try {
             if (!"http".equalsIgnoreCase(valueOrDefault(node.getNodeType(), "http"))) {
                 return failedRunNode(runId, node, "Unsupported node type: " + node.getNodeType());
@@ -462,7 +469,8 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
                         "Endpoint not found or deleted: " + node.getEndpointId());
             }
             return flowHttpExecutor.execute(
-                    runId, flow, node, endpoint, overrideBaseUrl, customHeaders);
+                    runId, flow, node, endpoint, overrideBaseUrl, customHeaders,
+                    effectiveSharedHeadersJson);
         } catch (Exception e) {
             return failedRunNode(runId, node, rootMessage(e));
         }
@@ -546,16 +554,31 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     private static class FlowScheduleResult {
         private int failedCount;
         private int blockedCount;
-        private final List<String> errors = new ArrayList<>();
+        private final List<String> failures = new ArrayList<>();
 
         private void record(BrickFlowNode node, BrickFlowRunNode runNode) {
-            if ("failed".equals(runNode.getStatus()) || "blocked".equals(runNode.getStatus())) {
-                errors.add("Node " + node.getId() + " " + runNode.getStatus() + ": " + runNode.getErrorMsg());
+            if ("failed".equals(runNode.getStatus())) {
+                failures.add("Node " + node.getId() + " failed: " + runNode.getErrorMsg());
             }
         }
 
         private String errorMessage() {
-            return errors.isEmpty() ? null : String.join("; ", errors);
+            if (failures.isEmpty()) {
+                return blockedCount == 0
+                        ? null
+                        : blockedCount + " " + nodeLabel(blockedCount)
+                                + " blocked because their dependencies were not satisfied";
+            }
+            String message = String.join("; ", failures);
+            if (blockedCount > 0) {
+                message += "; " + blockedCount + " downstream " + nodeLabel(blockedCount)
+                        + " not executed";
+            }
+            return message;
+        }
+
+        private String nodeLabel(int count) {
+            return count == 1 ? "node was" : "nodes were";
         }
     }
 

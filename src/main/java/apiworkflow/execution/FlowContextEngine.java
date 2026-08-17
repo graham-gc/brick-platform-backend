@@ -17,11 +17,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class FlowContextEngine {
 
     private static final Object MISSING = new Object();
+    private static final Pattern HEADER_NAME = Pattern.compile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$");
+    private static final Pattern FLOW_VARIABLE_TEMPLATE = Pattern.compile(
+            "\\{\\{\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*}}"
+    );
 
     public void validateConfiguration(List<? extends BrickFlowNode> nodes) {
         Set<String> names = new HashSet<>();
@@ -46,9 +52,19 @@ public class FlowContextEngine {
             for (JSONObject binding : objects(node.getRequestVariableBindingsJson(), "request variable bindings")) {
                 referencedNames.add(requiredText(binding, "variableName", "Binding variable is required"));
                 String targetType = requiredText(binding, "targetType", "Binding target type is required");
-                requiredText(binding, "targetPath", "Binding target field is required");
-                if (!"BODY".equals(targetType) && !"QUERY".equals(targetType) && !"PATH".equals(targetType)) {
+                String targetPath = requiredText(binding, "targetPath", "Binding target field is required");
+                if (!"BODY".equals(targetType) && !"QUERY".equals(targetType)
+                        && !"PATH".equals(targetType) && !"HEADER".equals(targetType)) {
                     throw new IllegalArgumentException("Unsupported variable binding target: " + targetType);
+                }
+                if ("HEADER".equals(targetType)) {
+                    validateHeaderName(targetPath);
+                    String template = binding.getString("valueTemplate");
+                    if (StringUtils.hasText(template) && !template.contains("{{value}}")) {
+                        throw new IllegalArgumentException(
+                                "Header value template must contain {{value}} for " + targetPath);
+                    }
+                    validateHeaderValue(template, targetPath);
                 }
             }
         }
@@ -74,10 +90,96 @@ public class FlowContextEngine {
                 node.setQueryParamsJson(writeJsonPath(node.getQueryParamsJson(), targetPath, value, true));
             } else if ("PATH".equals(targetType)) {
                 node.setPathVarsJson(writeJsonPath(node.getPathVarsJson(), targetPath, value, true));
+            } else if ("HEADER".equals(targetType)) {
+                node.setHeadersJson(writeHeader(
+                        node.getHeadersJson(), targetPath, value, binding.getString("valueTemplate")));
             } else {
                 throw new IllegalArgumentException("Unsupported variable binding target: " + targetType);
             }
         }
+    }
+
+    public void validateSharedHeaders(String sharedHeadersJson) {
+        JSONObject headers = jsonObject(sharedHeadersJson, "shared headers");
+        for (Map.Entry<String, Object> entry : headers.entrySet()) {
+            validateHeaderName(entry.getKey());
+            if (entry.getValue() instanceof JSONObject || entry.getValue() instanceof JSONArray) {
+                throw new IllegalArgumentException("Flow header value must be scalar: " + entry.getKey());
+            }
+            validateHeaderValue(entry.getValue() == null ? null : String.valueOf(entry.getValue()), entry.getKey());
+        }
+    }
+
+    public void validateSharedHeaderVariables(String sharedHeadersJson,
+                                              List<? extends BrickFlowNode> nodes) {
+        validateSharedHeaders(sharedHeadersJson);
+        Set<String> definedNames = new HashSet<>();
+        if (nodes != null) {
+            for (BrickFlowNode node : nodes) {
+                for (JSONObject definition : objects(
+                        node.getResponseVariablesJson(), "response variables")) {
+                    definedNames.add(requiredText(
+                            definition, "name", "Response variable name is required"));
+                }
+            }
+        }
+        JSONObject headers = jsonObject(sharedHeadersJson, "shared headers");
+        for (Map.Entry<String, Object> entry : headers.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            Matcher matcher = FLOW_VARIABLE_TEMPLATE.matcher(String.valueOf(entry.getValue()));
+            while (matcher.find()) {
+                String variableName = matcher.group(1);
+                if (!definedNames.contains(variableName)) {
+                    throw new IllegalArgumentException(
+                            "Flow header " + entry.getKey()
+                                    + " references an undefined flow variable: " + variableName);
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolves dynamic flow header templates against the variables captured so far. A header
+     * whose template still references an unavailable variable is deliberately omitted. This
+     * allows an Authorization header produced by a login node to become active only for nodes
+     * executed after the token has been captured.
+     */
+    public String resolveSharedHeaders(String sharedHeadersJson, Map<String, Object> context) {
+        JSONObject source = jsonObject(sharedHeadersJson, "shared headers");
+        JSONObject resolved = new JSONObject(true);
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            String name = entry.getKey();
+            validateHeaderName(name);
+            Object raw = entry.getValue();
+            if (raw == null) {
+                continue;
+            }
+            if (raw instanceof JSONObject || raw instanceof JSONArray) {
+                throw new IllegalArgumentException("Flow header value must be scalar: " + name);
+            }
+            String value = String.valueOf(raw);
+            Matcher matcher = FLOW_VARIABLE_TEMPLATE.matcher(value);
+            StringBuffer rendered = new StringBuffer();
+            boolean missingVariable = false;
+            while (matcher.find()) {
+                String variableName = matcher.group(1);
+                if (context == null || !context.containsKey(variableName)) {
+                    missingVariable = true;
+                    break;
+                }
+                matcher.appendReplacement(rendered,
+                        Matcher.quoteReplacement(headerScalar(context.get(variableName), name)));
+            }
+            if (missingVariable) {
+                continue;
+            }
+            matcher.appendTail(rendered);
+            validateHeaderValue(rendered.toString(), name);
+            resolved.put(name, rendered.toString());
+        }
+        return resolved.toJSONString();
     }
 
     public void captureResponseVariables(BrickFlowNode node, String responseBody,
@@ -192,6 +294,64 @@ public class FlowContextEngine {
         }
         setChild(current, tokens.get(tokens.size() - 1), value, path);
         return JSON.toJSONString(root);
+    }
+
+    private String writeHeader(String json, String name, Object value, String valueTemplate) {
+        validateHeaderName(name);
+        JSONObject headers = jsonObject(json, "headers");
+        String scalar = headerScalar(value, name);
+        String rendered;
+        if (StringUtils.hasText(valueTemplate)) {
+            if (!valueTemplate.contains("{{value}}")) {
+                throw new IllegalArgumentException(
+                        "Header value template must contain {{value}} for " + name);
+            }
+            rendered = valueTemplate.replace("{{value}}", scalar);
+        } else {
+            rendered = scalar;
+        }
+        validateHeaderValue(rendered, name);
+        headers.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
+        headers.put(name, rendered);
+        return headers.toJSONString();
+    }
+
+    private String headerScalar(Object value, String headerName) {
+        if (value == null || value instanceof Map || value instanceof Collection
+                || value instanceof JSONObject || value instanceof JSONArray) {
+            throw new IllegalArgumentException(
+                    "Header binding requires a scalar flow variable: " + headerName);
+        }
+        return String.valueOf(value);
+    }
+
+    private JSONObject jsonObject(String json, String label) {
+        if (!StringUtils.hasText(json)) {
+            return new JSONObject(true);
+        }
+        try {
+            Object value = JSON.parse(json);
+            if (!(value instanceof JSONObject)) {
+                throw new IllegalArgumentException(label + " must be a JSON object");
+            }
+            return (JSONObject) value;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid " + label + " JSON", e);
+        }
+    }
+
+    private void validateHeaderName(String name) {
+        if (!StringUtils.hasText(name) || !HEADER_NAME.matcher(name).matches()) {
+            throw new IllegalArgumentException("Invalid HTTP header name: " + name);
+        }
+    }
+
+    private void validateHeaderValue(String value, String name) {
+        if (value != null && (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0)) {
+            throw new IllegalArgumentException("HTTP header value contains a line break: " + name);
+        }
     }
 
     private Object child(Object current, PathToken token) {

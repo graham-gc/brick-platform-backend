@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.times;
@@ -190,7 +191,7 @@ class BrickFlowServiceImplTest {
         when(endpointDefinitionMapper.selectById(1)).thenReturn(firstEndpoint);
         when(endpointDefinitionMapper.selectById(2)).thenReturn(secondEndpoint);
         when(flowHttpExecutor.execute(eq(501L), eq(flow), any(BrickFlowNode.class),
-                any(EndpointDefinition.class), isNull(), isNull()))
+                any(EndpointDefinition.class), isNull(), isNull(), anyString()))
                 .thenAnswer(invocation -> successfulRunNode(invocation.getArgument(2)));
 
         BrickFlowRun run = service.runFlow(12, "graham", null, 0);
@@ -198,7 +199,7 @@ class BrickFlowServiceImplTest {
         assertEquals("success", run.getStatus());
         ArgumentCaptor<BrickFlowNode> executionOrder = ArgumentCaptor.forClass(BrickFlowNode.class);
         verify(flowHttpExecutor, times(2)).execute(eq(501L), eq(flow), executionOrder.capture(),
-                any(EndpointDefinition.class), isNull(), isNull());
+                any(EndpointDefinition.class), isNull(), isNull(), anyString());
         assertEquals(Long.valueOf(101L), executionOrder.getAllValues().get(0).getId());
         assertEquals(Long.valueOf(102L), executionOrder.getAllValues().get(1).getId());
         verify(runNodeMapper, times(2)).insert(any(BrickFlowRunNode.class));
@@ -225,7 +226,7 @@ class BrickFlowServiceImplTest {
         assertEquals("success", run.getStatus());
         ArgumentCaptor<BrickFlowNode> executionOrder = ArgumentCaptor.forClass(BrickFlowNode.class);
         verify(flowHttpExecutor, times(4)).execute(eq(501L), eq(flow), executionOrder.capture(),
-                any(EndpointDefinition.class), isNull(), isNull());
+                any(EndpointDefinition.class), isNull(), isNull(), anyString());
         assertEquals(Arrays.asList(101L, 102L, 103L, 104L), executionOrder.getAllValues().stream()
                 .map(BrickFlowNode::getId).collect(java.util.stream.Collectors.toList()));
     }
@@ -245,16 +246,18 @@ class BrickFlowServiceImplTest {
                 edge(303L, 102L, 104L),
                 edge(304L, 103L, 105L)));
         mockSuccessfulEndpoints(1, 2, 3, 5);
-        when(flowHttpExecutor.execute(eq(501L), eq(flow), eq(failing), any(EndpointDefinition.class), isNull(), isNull()))
+        when(flowHttpExecutor.execute(eq(501L), eq(flow), eq(failing), any(EndpointDefinition.class),
+                isNull(), isNull(), anyString()))
                 .thenReturn(failedRunNode(failing, "upstream failed"));
 
         BrickFlowRun run = service.runFlow(flow.getId(), "graham", null, 0);
 
         assertEquals("failed", run.getStatus());
+        assertEquals("Node 102 failed: upstream failed; 1 downstream node was not executed", run.getErrorMsg());
         verify(flowHttpExecutor).execute(eq(501L), eq(flow), eq(healthyChild),
-                any(EndpointDefinition.class), isNull(), isNull());
+                any(EndpointDefinition.class), isNull(), isNull(), anyString());
         verify(flowHttpExecutor, times(4)).execute(eq(501L), eq(flow), any(BrickFlowNode.class),
-                any(EndpointDefinition.class), isNull(), isNull());
+                any(EndpointDefinition.class), isNull(), isNull(), anyString());
         ArgumentCaptor<BrickFlowRunNode> records = ArgumentCaptor.forClass(BrickFlowRunNode.class);
         verify(runNodeMapper, times(5)).insert(records.capture());
         BrickFlowRunNode blockedRecord = records.getAllValues().stream()
@@ -274,14 +277,15 @@ class BrickFlowServiceImplTest {
         when(edgeMapper.selectByFlowId(12)).thenReturn(Arrays.asList(
                 edge(301L, 101L, 103L), edge(302L, 102L, 103L)));
         mockSuccessfulEndpoints(1, 2, 3);
-        when(flowHttpExecutor.execute(eq(501L), eq(flow), eq(failedParent), any(EndpointDefinition.class), isNull(), isNull()))
+        when(flowHttpExecutor.execute(eq(501L), eq(flow), eq(failedParent), any(EndpointDefinition.class),
+                isNull(), isNull(), anyString()))
                 .thenReturn(failedRunNode(failedParent, "expected failure"));
 
         BrickFlowRun run = service.runFlow(flow.getId(), "graham", null, 0);
 
         assertEquals("failed", run.getStatus());
         verify(flowHttpExecutor).execute(eq(501L), eq(flow), eq(join),
-                any(EndpointDefinition.class), isNull(), isNull());
+                any(EndpointDefinition.class), isNull(), isNull(), anyString());
     }
 
     @Test
@@ -300,13 +304,13 @@ class BrickFlowServiceImplTest {
         when(endpointDefinitionMapper.selectById(1)).thenReturn(endpoint(1));
         when(endpointDefinitionMapper.selectById(2)).thenReturn(endpoint(2));
         when(flowHttpExecutor.execute(eq(501L), eq(flow), eq(source), any(EndpointDefinition.class),
-                isNull(), isNull())).thenAnswer(invocation -> {
+                isNull(), isNull(), anyString())).thenAnswer(invocation -> {
             BrickFlowRunNode result = successfulRunNode(source);
             result.setFullResponse("{\"data\":{\"id\":\"ord-2001\"}}");
             return result;
         });
         when(flowHttpExecutor.execute(eq(501L), eq(flow), eq(target), any(EndpointDefinition.class),
-                isNull(), isNull())).thenAnswer(invocation -> successfulRunNode(target));
+                isNull(), isNull(), anyString())).thenAnswer(invocation -> successfulRunNode(target));
 
         BrickFlowRun run = service.runFlow(flow.getId(), "graham", null, 0);
 
@@ -331,7 +335,7 @@ class BrickFlowServiceImplTest {
             when(endpointDefinitionMapper.selectById(endpointId)).thenReturn(endpoint(endpointId));
         }
         when(flowHttpExecutor.execute(any(Long.class), any(BrickFlow.class), any(BrickFlowNode.class),
-                any(EndpointDefinition.class), isNull(), isNull()))
+                any(EndpointDefinition.class), isNull(), isNull(), anyString()))
                 .thenAnswer(invocation -> successfulRunNode(invocation.getArgument(2)));
     }
 

@@ -128,4 +128,63 @@ class FlowContextEngineTest {
         assertThrows(IllegalArgumentException.class,
                 () -> engine.validateConfiguration(Arrays.asList(source)));
     }
+
+    @Test
+    void bindsAScalarFlowVariableIntoANodeHeaderTemplate() {
+        BrickFlowNode target = new BrickFlowNode();
+        target.setHeadersJson("{\"Accept\":\"application/json\"}");
+        target.setRequestVariableBindingsJson("[{\"variableName\":\"accessToken\"," 
+                + "\"targetType\":\"HEADER\",\"targetPath\":\"Authorization\"," 
+                + "\"valueTemplate\":\"Bearer {{value}}\"}]");
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("accessToken", "mock-access-token");
+
+        engine.applyBindings(target, context);
+
+        JSONObject headers = JSON.parseObject(target.getHeadersJson());
+        assertEquals("application/json", headers.getString("Accept"));
+        assertEquals("Bearer mock-access-token", headers.getString("Authorization"));
+    }
+
+    @Test
+    void activatesADynamicFlowHeaderOnlyAfterItsVariableExists() {
+        String headers = "{\"Accept\":\"application/json\"," 
+                + "\"Authorization\":\"Bearer {{accessToken}}\"}";
+        Map<String, Object> context = new LinkedHashMap<>();
+
+        JSONObject beforeLogin = JSON.parseObject(engine.resolveSharedHeaders(headers, context));
+        assertEquals("application/json", beforeLogin.getString("Accept"));
+        assertEquals(false, beforeLogin.containsKey("Authorization"));
+
+        context.put("accessToken", "mock-access-token");
+        JSONObject afterLogin = JSON.parseObject(engine.resolveSharedHeaders(headers, context));
+        assertEquals("Bearer mock-access-token", afterLogin.getString("Authorization"));
+    }
+
+    @Test
+    void rejectsAHeaderBindingTemplateWithoutTheValuePlaceholder() {
+        BrickFlowNode source = new BrickFlowNode();
+        source.setResponseVariablesJson("[{\"name\":\"accessToken\",\"responsePath\":\"$.token\"}]");
+        BrickFlowNode target = new BrickFlowNode();
+        target.setRequestVariableBindingsJson("[{\"variableName\":\"accessToken\"," 
+                + "\"targetType\":\"HEADER\",\"targetPath\":\"Authorization\"," 
+                + "\"valueTemplate\":\"Bearer token\"}]");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> engine.validateConfiguration(Arrays.asList(source, target)));
+    }
+
+    @Test
+    void rejectsAFlowHeaderThatReferencesAnUndefinedVariable() {
+        BrickFlowNode source = new BrickFlowNode();
+        source.setResponseVariablesJson("[{\"name\":\"accessToken\",\"responsePath\":\"$.token\"}]");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> engine.validateSharedHeaderVariables(
+                        "{\"Authorization\":\"Bearer {{acessToken}}\"}",
+                        Arrays.asList(source)));
+
+        assertEquals("Flow header Authorization references an undefined flow variable: acessToken",
+                error.getMessage());
+    }
 }

@@ -42,6 +42,14 @@ public class FlowHttpExecutor {
     public BrickFlowRunNode execute(Long runId, BrickFlow flow, BrickFlowNode node,
                                     EndpointDefinition endpoint, String overrideBaseUrl,
                                     Map<String, String> customHeaders) {
+        return execute(runId, flow, node, endpoint, overrideBaseUrl, customHeaders,
+                flow.getSharedHeadersJson());
+    }
+
+    public BrickFlowRunNode execute(Long runId, BrickFlow flow, BrickFlowNode node,
+                                    EndpointDefinition endpoint, String overrideBaseUrl,
+                                    Map<String, String> customHeaders,
+                                    String effectiveSharedHeadersJson) {
         Date startTime = new Date();
         BrickFlowRunNode result = new BrickFlowRunNode();
         result.setRunId(runId);
@@ -54,7 +62,8 @@ public class FlowHttpExecutor {
         try {
             Map<String, Object> pathVariables = parseJsonObject(node.getPathVarsJson(), "path parameters");
             Map<String, Object> queryParameters = parseJsonObject(node.getQueryParamsJson(), "query parameters");
-            Map<String, String> headers = mergeHeaders(flow.getSharedHeadersJson(), node.getHeadersJson(), customHeaders);
+            Map<String, String> headers = mergeHeaders(
+                    effectiveSharedHeadersJson, node.getHeadersJson(), customHeaders);
             String requestBody = trimToNull(node.getPayloadJson());
             String requestUrl = buildRequestUrl(endpoint, overrideBaseUrl, pathVariables, queryParameters);
 
@@ -123,7 +132,7 @@ public class FlowHttpExecutor {
             builder.setHeader(header.getKey(), header.getValue());
         }
         if (body != null && allowsRequestBody(method)) {
-            ContentType contentType = contentType(headers.get("Content-Type"));
+            ContentType contentType = contentType(headerIgnoreCase(headers, "Content-Type"));
             builder.setEntity(new StringEntity(body, contentType));
             if (!containsHeaderIgnoreCase(headers, "Content-Type")) {
                 builder.setHeader("Content-Type", ContentType.APPLICATION_JSON.getMimeType());
@@ -203,7 +212,9 @@ public class FlowHttpExecutor {
         addHeaders(result, parseJsonObject(sharedHeadersJson, "shared headers"));
         addHeaders(result, parseJsonObject(nodeHeadersJson, "headers"));
         if (customHeaders != null) {
-            result.putAll(customHeaders);
+            for (Map.Entry<String, String> entry : customHeaders.entrySet()) {
+                putHeader(result, entry.getKey(), entry.getValue());
+            }
         }
         return result;
     }
@@ -211,9 +222,14 @@ public class FlowHttpExecutor {
     private void addHeaders(Map<String, String> target, Map<String, Object> source) {
         for (Map.Entry<String, Object> entry : source.entrySet()) {
             if (entry.getValue() != null) {
-                target.put(entry.getKey(), String.valueOf(entry.getValue()));
+                putHeader(target, entry.getKey(), String.valueOf(entry.getValue()));
             }
         }
+    }
+
+    private void putHeader(Map<String, String> target, String name, String value) {
+        target.keySet().removeIf(existing -> existing.equalsIgnoreCase(name));
+        target.put(name, value);
     }
 
     private ContentType contentType(String headerValue) {
@@ -234,6 +250,15 @@ public class FlowHttpExecutor {
             }
         }
         return false;
+    }
+
+    private String headerIgnoreCase(Map<String, String> headers, String expectedName) {
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            if (expectedName.equalsIgnoreCase(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private boolean allowsRequestBody(String method) {
