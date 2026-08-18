@@ -3,6 +3,7 @@ package apiworkflow.entity;
 import lombok.Data;
 import java.io.Serializable;
 import java.util.Date;
+import java.util.List;
 
 @Data
 public class BrickFlowRunNode implements Serializable {
@@ -33,4 +34,5 @@ public class BrickFlowRunNode implements Serializable {
     private String assertionSummary;
     private Date createTime;
     private Date updateTime;
+    private List<BrickFlowRunNodeAssertion> assertions;
 }

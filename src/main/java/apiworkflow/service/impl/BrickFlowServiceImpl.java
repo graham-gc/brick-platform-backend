@@ -2,11 +2,13 @@ package apiworkflow.service.impl;
 
 import apiworkflow.dto.BrickFlowFullNode;
 import apiworkflow.entity.*;
+import apiworkflow.execution.AssertionExecutor;
 import apiworkflow.execution.FlowHttpExecutor;
 import apiworkflow.execution.FlowContextEngine;
 import apiworkflow.mapper.*;
 import apiworkflow.service.IBrickFlowService;
 import com.alibaba.fastjson.JSON;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,12 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     private BrickFlowRunNodeMapper runNodeMapper;
 
     @Autowired
+    private BrickFlowNodeAssertionMapper nodeAssertionMapper;
+
+    @Autowired
+    private BrickFlowRunNodeAssertionMapper runAssertionMapper;
+
+    @Autowired
     private EndpointDefinitionMapper endpointDefinitionMapper;
 
     @Autowired
@@ -41,6 +49,9 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
 
     @Autowired
     private FlowContextEngine flowContextEngine;
+
+    @Autowired
+    private apiworkflow.execution.AssertionExecutor assertionExecutor;
 
     @Override
     public BrickFlow getFlow(Integer id) {
@@ -63,30 +74,13 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
 
     @Override
     @Transactional
-    public int createFlow(BrickFlow flow, List<BrickFlowNode> nodes, List<BrickFlowEdge> edges, String operator) {
-        flowContextEngine.validateSharedHeaderVariables(flow.getSharedHeadersJson(), nodes);
-        flow.setIsDeleted(0);
-        flow.setCreateBy(operator);
-        int result = flowMapper.insert(flow);
-
-        Map<Long, Long> nodeIdMap = insertNewNodes(flow.getId(), nodes, operator);
-        replaceEdges(flow.getId(), edges, nodeIdMap, operator, false);
-
-        return result;
-    }
-
-    @Override
-    @Transactional
     public int createFullFlow(BrickFlow flow, List<BrickFlowFullNode> fullNodes, List<BrickFlowEdge> edges, String operator) {
         flowContextEngine.validateSharedHeaderVariables(flow.getSharedHeadersJson(), fullNodes);
         flow.setIsDeleted(0);
         flow.setCreateBy(operator);
         int result = flowMapper.insert(flow);
 
-        List<BrickFlowNode> nodes = fullNodes == null
-                ? Collections.emptyList()
-                : new ArrayList<>(fullNodes);
-        Map<Long, Long> nodeIdMap = insertNewNodes(flow.getId(), nodes, operator);
+        Map<Long, Long> nodeIdMap = insertNewNodesWithAssertions(flow.getId(), fullNodes, operator);
         replaceEdges(flow.getId(), edges, nodeIdMap, operator, false);
 
         return result;
@@ -94,16 +88,16 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
 
     @Override
     @Transactional
-    public int updateFlow(BrickFlow flow, List<BrickFlowNode> nodes, List<BrickFlowEdge> edges, String operator) {
+    public int updateFullFlow(BrickFlow flow, List<BrickFlowFullNode> fullNodes, List<BrickFlowEdge> edges, String operator) {
         if (flow == null || flow.getId() == null) {
             throw new IllegalArgumentException("Flow id is required when updating a flow");
         }
 
-        flowContextEngine.validateSharedHeaderVariables(flow.getSharedHeadersJson(), nodes);
+        flowContextEngine.validateSharedHeaderVariables(flow.getSharedHeadersJson(), fullNodes);
         flow.setUpdateBy(operator);
         int result = flowMapper.updateById(flow);
 
-        Map<Long, Long> nodeIdMap = synchronizeNodes(flow.getId(), nodes, operator);
+        Map<Long, Long> nodeIdMap = synchronizeNodesWithAssertions(flow.getId(), fullNodes, operator);
         replaceEdges(flow.getId(), edges, nodeIdMap, operator, true);
 
         return result;
@@ -134,37 +128,15 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
         return nodeIdMap;
     }
 
-    /**
-     * Keeps persisted node ids stable during edits, inserts new client-side nodes, and soft
-     * deletes nodes omitted from the submitted canvas.
-     */
-    private Map<Long, Long> synchronizeNodes(Integer flowId, List<BrickFlowNode> nodes, String operator) {
-        List<BrickFlowNode> safeNodes = nodes == null ? Collections.emptyList() : nodes;
+    private Map<Long, Long> insertNewNodesWithAssertions(Integer flowId, List<BrickFlowFullNode> fullNodes, String operator) {
+        List<BrickFlowFullNode> safeNodes = fullNodes == null ? Collections.emptyList() : fullNodes;
         flowContextEngine.validateConfiguration(safeNodes);
         validateUniqueClientNodeIds(safeNodes);
 
-        Map<Long, BrickFlowNode> existingNodes = nodeMapper.selectByFlowId(flowId).stream()
-                .collect(Collectors.toMap(BrickFlowNode::getId, node -> node));
         Map<Long, Long> nodeIdMap = new HashMap<>();
-
-        nodeMapper.deleteByFlowId(flowId);
-        for (BrickFlowNode node : safeNodes) {
-            Long clientNodeId = node.getId();
-            if (clientNodeId != null && existingNodes.containsKey(clientNodeId)) {
-                node.setFlowId(flowId);
-                node.setJoinMode(normalizedJoinMode(node));
-                node.setIsDeleted(0);
-                node.setUpdateBy(operator);
-                nodeMapper.updateById(node);
-                nodeIdMap.put(clientNodeId, clientNodeId);
-                continue;
-            }
-
-            if (clientNodeId != null && clientNodeId > 0 && nodeMapper.selectById(clientNodeId) != null) {
-                throw new IllegalArgumentException(
-                        "Node " + clientNodeId + " does not belong to active flow " + flowId);
-            }
-
+        for (BrickFlowFullNode fullNode : safeNodes) {
+            Long clientNodeId = fullNode.getId();
+            BrickFlowNode node = fullNode;
             prepareNewNode(node, flowId, operator);
             int inserted = nodeMapper.insert(node);
             if (inserted != 1 || node.getId() == null) {
@@ -172,6 +144,82 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
             }
             if (clientNodeId != null) {
                 nodeIdMap.put(clientNodeId, node.getId());
+            }
+
+            // Save assertions for this node
+            if (fullNode.getAssertions() != null && !fullNode.getAssertions().isEmpty()) {
+                for (BrickFlowNodeAssertion assertion : fullNode.getAssertions()) {
+                    assertion.setNodeId(node.getId());
+                    assertion.setId(null);
+                    assertion.setCreateTime(new Date());
+                    assertion.setUpdateTime(new Date());
+                    nodeAssertionMapper.insert(assertion);
+                }
+            }
+        }
+        return nodeIdMap;
+    }
+
+    /**
+     * Keeps persisted node ids stable during edits, inserts new client-side nodes, and soft
+     * deletes nodes omitted from the submitted canvas.
+     */
+    private Map<Long, Long> synchronizeNodesWithAssertions(Integer flowId, List<BrickFlowFullNode> fullNodes, String operator) {
+        List<BrickFlowFullNode> safeNodes = fullNodes == null ? Collections.emptyList() : fullNodes;
+        flowContextEngine.validateConfiguration(safeNodes);
+        validateUniqueClientNodeIds(safeNodes);
+
+        // Get existing nodes and their assertions
+        List<BrickFlowNode> existingNodesList = nodeMapper.selectByFlowId(flowId);
+        Map<Long, BrickFlowNode> existingNodes = existingNodesList.stream()
+                .collect(Collectors.toMap(BrickFlowNode::getId, node -> node));
+
+        Map<Long, Long> nodeIdMap = new HashMap<>();
+
+        // Delete all existing nodes (cascades to assertions via DB or we delete them manually)
+        // First delete assertions for all existing nodes
+        for (BrickFlowNode existingNode : existingNodesList) {
+            nodeAssertionMapper.deleteByNodeId(existingNode.getId());
+        }
+        nodeMapper.deleteByFlowId(flowId);
+
+        for (BrickFlowFullNode fullNode : safeNodes) {
+            Long clientNodeId = fullNode.getId();
+            BrickFlowNode node = fullNode;
+
+            if (clientNodeId != null && clientNodeId > 0 && existingNodes.containsKey(clientNodeId)) {
+                // Existing node - update it
+                node.setFlowId(flowId);
+                node.setJoinMode(normalizedJoinMode(node));
+                node.setIsDeleted(0);
+                node.setUpdateBy(operator);
+                nodeMapper.updateById(node);
+                nodeIdMap.put(clientNodeId, clientNodeId);
+            } else {
+                // New node - insert it
+                if (clientNodeId != null && clientNodeId > 0 && nodeMapper.selectById(clientNodeId) != null) {
+                    throw new IllegalArgumentException(
+                            "Node " + clientNodeId + " does not belong to active flow " + flowId);
+                }
+                prepareNewNode(node, flowId, operator);
+                int inserted = nodeMapper.insert(node);
+                if (inserted != 1 || node.getId() == null) {
+                    throw new IllegalStateException("Database did not return an id for a new flow node");
+                }
+                if (clientNodeId != null) {
+                    nodeIdMap.put(clientNodeId, node.getId());
+                }
+            }
+
+            // Sync assertions for this node
+            if (fullNode.getAssertions() != null && !fullNode.getAssertions().isEmpty()) {
+                for (BrickFlowNodeAssertion assertion : fullNode.getAssertions()) {
+                    assertion.setNodeId(node.getId());
+                    assertion.setId(null);
+                    assertion.setCreateTime(new Date());
+                    assertion.setUpdateTime(new Date());
+                    nodeAssertionMapper.insert(assertion);
+                }
             }
         }
         return nodeIdMap;
@@ -253,9 +301,19 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
         List<BrickFlowNode> nodes = nodeMapper.selectByFlowId(id);
         List<BrickFlowEdge> edges = edgeMapper.selectByFlowId(id);
 
+        // Convert to BrickFlowFullNode with assertions
+        List<BrickFlowFullNode> fullNodes = new ArrayList<>();
+        for (BrickFlowNode node : nodes) {
+            BrickFlowFullNode fullNode = new BrickFlowFullNode();
+            BeanUtils.copyProperties(node, fullNode);
+            List<BrickFlowNodeAssertion> assertions = nodeAssertionMapper.selectByNodeId(node.getId());
+            fullNode.setAssertions(assertions);
+            fullNodes.add(fullNode);
+        }
+
         Map<String, Object> result = new HashMap<>();
         result.put("flow", flow);
-        result.put("nodes", nodes);
+        result.put("nodes", fullNodes);
         result.put("edges", edges);
         return result;
     }
@@ -408,6 +466,34 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
                     }
                 }
                 runNodeMapper.insert(runNode);
+
+                // Execute assertions after runNode is inserted (so we have runNode.id)
+                if (assertionExecutor != null && runNode.getId() != null) {
+                    try {
+                        Map<String, List<String>> responseHeaders = JSON.parseObject(runNode.getResponseHeaders(),
+                                new com.alibaba.fastjson.TypeReference<Map<String, List<String>>>() {});
+                        AssertionExecutor.AssertionResult assertionResult = assertionExecutor.executeAssertions(
+                                runNode.getId(), node.getId(),
+                                runNode.getHttpStatus(), runNode.getFullResponse(),
+                                responseHeaders,
+                                runNode.getDurationMs());
+                        runNode.setAssertionTotalCount(assertionResult.total);
+                        runNode.setAssertionPassedCount(assertionResult.passed);
+                        runNode.setAssertionFailedCount(assertionResult.failed);
+                        StringBuilder summary = new StringBuilder();
+                        for (apiworkflow.entity.BrickFlowRunNodeAssertion ra : assertionResult.runAssertions) {
+                            if (summary.length() > 0) summary.append("; ");
+                            summary.append(ra.getStatus().toUpperCase()).append(":")
+                                   .append(ra.getActualValue()).append(" ")
+                                   .append(ra.getExpectedValue());
+                        }
+                        runNode.setAssertionSummary(summary.toString());
+                        runNodeMapper.updateById(runNode);
+                    } catch (Exception e) {
+                        // Assertion execution should not fail the node
+                    }
+                }
+
                 states.put(node.getId(), runNode.getStatus().toLowerCase(Locale.ROOT));
                 result.record(node, runNode);
                 iterator.remove();
@@ -607,6 +693,23 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
         BrickFlowRun run = runMapper.selectById(runId);
         List<BrickFlowRunNode> nodes = runNodeMapper.selectByRunId(runId);
 
+        // Load assertions for each node and enrich with original config
+        for (BrickFlowRunNode node : nodes) {
+            List<BrickFlowRunNodeAssertion> assertions = runAssertionMapper.selectByRunNodeId(node.getId());
+            // Enrich with original assertion config
+            for (BrickFlowRunNodeAssertion assertion : assertions) {
+                if (assertion.getAssertionId() != null) {
+                    BrickFlowNodeAssertion original = nodeAssertionMapper.selectById(assertion.getAssertionId());
+                    if (original != null) {
+                        assertion.setAssertionType(original.getAssertionType());
+                        assertion.setFieldPath(original.getFieldPath());
+                        assertion.setOperator(original.getOperator());
+                    }
+                }
+            }
+            node.setAssertions(assertions);
+        }
+
         Map<String, Object> result = new HashMap<>();
         result.put("run", run);
         result.put("nodes", nodes);
@@ -716,6 +819,34 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
 
     @Override
     public List<BrickFlowRunNodeAssertion> getRunNodeAssertions(Long runNodeId) {
-        return new ArrayList<>();
+        return runAssertionMapper.selectByRunNodeId(runNodeId);
+    }
+
+    @Override
+    public List<BrickFlowNodeAssertion> getAssertionsByNodeId(Long nodeId) {
+        return nodeAssertionMapper.selectByNodeId(nodeId);
+    }
+
+    @Override
+    @Transactional
+    public int replaceAssertions(Long nodeId, List<BrickFlowNodeAssertion> assertions, String operator) {
+        nodeAssertionMapper.deleteByNodeId(nodeId);
+        if (assertions == null || assertions.isEmpty()) {
+            return 0;
+        }
+        for (BrickFlowNodeAssertion assertion : assertions) {
+            assertion.setNodeId(nodeId);
+            assertion.setId(null);
+            assertion.setCreateTime(new Date());
+            assertion.setUpdateTime(new Date());
+            nodeAssertionMapper.insert(assertion);
+        }
+        return assertions.size();
+    }
+
+    @Override
+    @Transactional
+    public int deleteAssertions(Long nodeId) {
+        return nodeAssertionMapper.deleteByNodeId(nodeId);
     }
 }

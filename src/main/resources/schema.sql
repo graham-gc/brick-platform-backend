@@ -335,7 +335,9 @@ CREATE TABLE IF NOT EXISTS brick_flow_node_assertion (
     expected_value VARCHAR(500),
     is_enabled TINYINT DEFAULT 1,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_node_id (node_id),
+    INDEX idx_node_enabled (node_id, is_enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 流程节点断言执行记录表
@@ -347,7 +349,8 @@ CREATE TABLE IF NOT EXISTS brick_flow_run_node_assertion (
     actual_value TEXT,
     expected_value VARCHAR(500),
     error_msg TEXT,
-    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_run_node_id (run_node_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 需求测试任务表

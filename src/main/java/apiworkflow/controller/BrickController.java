@@ -44,6 +44,7 @@ public class BrickController {
     @PostMapping("/mappings")
     public ApiResponse<Integer> createMapping(@RequestBody AppSwaggerMapping record) {
         int result = apiService.createMapping(record);
+
         if (result != 1 || record.getId() == null) {
             return ApiResponse.error("Failed to create Swagger mapping");
         }
@@ -203,20 +204,13 @@ public class BrickController {
     @PostMapping("/flows")
     public ApiResponse<BrickFlow> createFlow(@RequestBody FlowUpsertReq request) {
         BrickFlow flow = request.getFlow();
-        int result = flowService.createFlow(flow, request.getNodes(), request.getEdges(), request.getOperator());
-        return ApiResponse.success(flow);
-    }
-
-    @PostMapping("/full/flows")
-    public ApiResponse<BrickFlow> createFullFlow(@RequestBody FlowUpsertReq request) {
-        BrickFlow flow = request.getFlow();
-        flowService.createFullFlow(flow, request.getFullNodes(), request.getEdges(), request.getOperator());
+        flowService.createFullFlow(flow, request.getNodes(), request.getEdges(), request.getOperator());
         return ApiResponse.success(flow);
     }
 
     @PostMapping("/flows/update")
     public ApiResponse<Integer> updateFlow(@RequestBody FlowUpsertReq request) {
-        int result = flowService.updateFlow(request.getFlow(), request.getNodes(), request.getEdges(), request.getOperator());
+        int result = flowService.updateFullFlow(request.getFlow(), request.getNodes(), request.getEdges(), request.getOperator());
         return ApiResponse.success(result);
     }
 
@@ -466,5 +460,33 @@ public class BrickController {
     public ApiResponse<Integer> deleteGlobalVariable(@PathVariable Long id) {
         int result = globalVariableService.delete(id);
         return ApiResponse.success(result);
+    }
+
+    // ==================== Node Assertion APIs ====================
+
+    @GetMapping("/nodes/{nodeId}/assertions")
+    public ApiResponse<List<BrickFlowNodeAssertion>> getNodeAssertions(@PathVariable Long nodeId) {
+        List<BrickFlowNodeAssertion> assertions = flowService.getAssertionsByNodeId(nodeId);
+        return ApiResponse.success(assertions);
+    }
+
+    @PostMapping("/nodes/{nodeId}/assertions")
+    public ApiResponse<Integer> saveNodeAssertions(@PathVariable Long nodeId,
+                                                      @RequestBody List<BrickFlowNodeAssertion> assertions,
+                                                      @RequestParam(required = false) String operator) {
+        int result = flowService.replaceAssertions(nodeId, assertions, operator);
+        return ApiResponse.success(result);
+    }
+
+    @DeleteMapping("/nodes/{nodeId}/assertions")
+    public ApiResponse<Integer> deleteNodeAssertions(@PathVariable Long nodeId) {
+        int result = flowService.deleteAssertions(nodeId);
+        return ApiResponse.success(result);
+    }
+
+    @GetMapping("/run-nodes/{runNodeId}/assertions")
+    public ApiResponse<List<BrickFlowRunNodeAssertion>> getRunNodeAssertions(@PathVariable Long runNodeId) {
+        List<BrickFlowRunNodeAssertion> assertions = flowService.getRunNodeAssertions(runNodeId);
+        return ApiResponse.success(assertions);
     }
 }

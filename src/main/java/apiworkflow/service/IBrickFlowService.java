@@ -6,6 +6,7 @@ import apiworkflow.entity.BrickFlowNode;
 import apiworkflow.entity.BrickFlowRun;
 import apiworkflow.entity.BrickFlowRunNode;
 import apiworkflow.entity.BrickFlowRunNodeAssertion;
+import apiworkflow.entity.BrickFlowNodeAssertion;
 import apiworkflow.entity.AppSwaggerMapping;
 import apiworkflow.dto.*;
 import java.util.List;
@@ -20,11 +21,9 @@ public interface IBrickFlowService {
 
     int countFlows(BrickFlow query, Integer endpointId, Integer grpcEndpointId, String executionStatus);
 
-    int createFlow(BrickFlow flow, List<BrickFlowNode> nodes, List<BrickFlowEdge> edges, String operator);
-
     int createFullFlow(BrickFlow flow, List<BrickFlowFullNode> fullNodes, List<BrickFlowEdge> edges, String operator);
 
-    int updateFlow(BrickFlow flow, List<BrickFlowNode> nodes, List<BrickFlowEdge> edges, String operator);
+    int updateFullFlow(BrickFlow flow, List<BrickFlowFullNode> fullNodes, List<BrickFlowEdge> edges, String operator);
 
     int deleteFlow(Integer id, String operator);
 
@@ -71,4 +70,10 @@ public interface IBrickFlowService {
     BrickFlowRunNode getNodeExecutionDetail(Long runId, Long nodeId);
 
     List<BrickFlowRunNodeAssertion> getRunNodeAssertions(Long runNodeId);
+
+    List<BrickFlowNodeAssertion> getAssertionsByNodeId(Long nodeId);
+
+    int replaceAssertions(Long nodeId, List<BrickFlowNodeAssertion> assertions, String operator);
+
+    int deleteAssertions(Long nodeId);
 }

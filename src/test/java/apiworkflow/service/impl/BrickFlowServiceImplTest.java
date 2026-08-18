@@ -1,8 +1,10 @@
 package apiworkflow.service.impl;
 
+import apiworkflow.dto.BrickFlowFullNode;
 import apiworkflow.entity.BrickFlow;
 import apiworkflow.entity.BrickFlowEdge;
 import apiworkflow.entity.BrickFlowNode;
+import apiworkflow.entity.BrickFlowNodeAssertion;
 import apiworkflow.entity.BrickFlowRun;
 import apiworkflow.entity.BrickFlowRunNode;
 import apiworkflow.entity.EndpointDefinition;
@@ -10,8 +12,10 @@ import apiworkflow.execution.FlowHttpExecutor;
 import apiworkflow.execution.FlowContextEngine;
 import apiworkflow.mapper.BrickFlowEdgeMapper;
 import apiworkflow.mapper.BrickFlowMapper;
+import apiworkflow.mapper.BrickFlowNodeAssertionMapper;
 import apiworkflow.mapper.BrickFlowNodeMapper;
 import apiworkflow.mapper.BrickFlowRunMapper;
+import apiworkflow.mapper.BrickFlowRunNodeAssertionMapper;
 import apiworkflow.mapper.BrickFlowRunNodeMapper;
 import apiworkflow.mapper.EndpointDefinitionMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +50,12 @@ class BrickFlowServiceImplTest {
     private BrickFlowNodeMapper nodeMapper;
 
     @Mock
+    private BrickFlowNodeAssertionMapper nodeAssertionMapper;
+
+    @Mock
+    private BrickFlowRunNodeAssertionMapper runAssertionMapper;
+
+    @Mock
     private BrickFlowEdgeMapper edgeMapper;
 
     @Mock
@@ -67,6 +77,8 @@ class BrickFlowServiceImplTest {
         service = new BrickFlowServiceImpl();
         ReflectionTestUtils.setField(service, "flowMapper", flowMapper);
         ReflectionTestUtils.setField(service, "nodeMapper", nodeMapper);
+        ReflectionTestUtils.setField(service, "nodeAssertionMapper", nodeAssertionMapper);
+        ReflectionTestUtils.setField(service, "runAssertionMapper", runAssertionMapper);
         ReflectionTestUtils.setField(service, "edgeMapper", edgeMapper);
         ReflectionTestUtils.setField(service, "runMapper", runMapper);
         ReflectionTestUtils.setField(service, "runNodeMapper", runNodeMapper);
@@ -85,7 +97,7 @@ class BrickFlowServiceImplTest {
         });
         assignGeneratedNodeIdsStartingAt(101L);
 
-        List<BrickFlowNode> nodes = Arrays.asList(
+        List<BrickFlowFullNode> nodes = Arrays.asList(
                 node(-1L, 25),
                 node(-2L, 25),
                 node(-3L, 25)
@@ -95,7 +107,7 @@ class BrickFlowServiceImplTest {
                 edge(-2L, -2L, -3L)
         );
 
-        service.createFlow(flow, nodes, edges, "graham");
+        service.createFullFlow(flow, nodes, edges, "graham");
 
         assertEquals(Long.valueOf(101L), nodes.get(0).getId());
         assertEquals(Long.valueOf(102L), nodes.get(1).getId());
@@ -124,11 +136,13 @@ class BrickFlowServiceImplTest {
         when(nodeMapper.selectByFlowId(12)).thenReturn(Collections.singletonList(existing));
         assignGeneratedNodeIdsStartingAt(102L);
 
-        List<BrickFlowNode> nodes = Arrays.asList(node(101L, 25), node(-1L, 25));
+        List<BrickFlowFullNode> nodes = Arrays.asList(node(101L, 25), node(-1L, 25));
         List<BrickFlowEdge> edges = Collections.singletonList(edge(-1L, 101L, -1L));
 
-        service.updateFlow(flow, nodes, edges, "graham");
+        service.updateFullFlow(flow, nodes, edges, "graham");
 
+        // Verify existing node's assertions were deleted before sync
+        verify(nodeAssertionMapper).deleteByNodeId(101L);
         verify(nodeMapper).deleteByFlowId(12);
         verify(nodeMapper).updateById(nodes.get(0));
         assertEquals(Long.valueOf(101L), nodes.get(0).getId());
@@ -140,6 +154,42 @@ class BrickFlowServiceImplTest {
         BrickFlowEdge savedEdge = edgesCaptor.getValue().get(0);
         assertEquals(Long.valueOf(101L), savedEdge.getSourceNodeId());
         assertEquals(Long.valueOf(102L), savedEdge.getTargetNodeId());
+    }
+
+    @Test
+    void createFullFlowWithAssertions() {
+        BrickFlow flow = new BrickFlow();
+        flow.setName("flow with assertions");
+        when(flowMapper.insert(any(BrickFlow.class))).thenAnswer(invocation -> {
+            ((BrickFlow) invocation.getArgument(0)).setId(12);
+            return 1;
+        });
+        assignGeneratedNodeIdsStartingAt(201L);
+
+        BrickFlowFullNode nodeWithAssertion = node(-1L, 25);
+        nodeWithAssertion.setAssertions(Arrays.asList(
+                assertion("json_path", "$.data.name", "equals", "test"),
+                assertion("status_code", null, "equals", "200")
+        ));
+
+        List<BrickFlowFullNode> nodes = Collections.singletonList(nodeWithAssertion);
+        List<BrickFlowEdge> edges = Collections.emptyList();
+
+        service.createFullFlow(flow, nodes, edges, "graham");
+
+        // Verify node was inserted
+        ArgumentCaptor<BrickFlowNode> nodeCaptor = ArgumentCaptor.forClass(BrickFlowNode.class);
+        verify(nodeMapper).insert(nodeCaptor.capture());
+        assertEquals(Long.valueOf(201L), nodeCaptor.getValue().getId());
+
+        // Verify assertions were inserted
+        ArgumentCaptor<BrickFlowNodeAssertion> assertionCaptor = ArgumentCaptor.forClass(BrickFlowNodeAssertion.class);
+        verify(nodeAssertionMapper, times(2)).insert(assertionCaptor.capture());
+        List<BrickFlowNodeAssertion> savedAssertions = assertionCaptor.getAllValues();
+        assertEquals(2, savedAssertions.size());
+        assertEquals(Long.valueOf(201L), savedAssertions.get(0).getNodeId());
+        assertEquals("json_path", savedAssertions.get(0).getAssertionType());
+        assertEquals("$.data.name", savedAssertions.get(0).getFieldPath());
     }
 
     @Test
@@ -348,8 +398,8 @@ class BrickFlowServiceImplTest {
         });
     }
 
-    private BrickFlowNode node(Long id, Integer endpointId) {
-        BrickFlowNode node = new BrickFlowNode();
+    private BrickFlowFullNode node(Long id, Integer endpointId) {
+        BrickFlowFullNode node = new BrickFlowFullNode();
         node.setId(id);
         node.setEndpointId(endpointId);
         node.setNodeType("http");
@@ -362,6 +412,16 @@ class BrickFlowServiceImplTest {
         edge.setSourceNodeId(sourceNodeId);
         edge.setTargetNodeId(targetNodeId);
         return edge;
+    }
+
+    private BrickFlowNodeAssertion assertion(String assertionType, String fieldPath, String operator, String expectedValue) {
+        BrickFlowNodeAssertion a = new BrickFlowNodeAssertion();
+        a.setAssertionType(assertionType);
+        a.setFieldPath(fieldPath);
+        a.setOperator(operator);
+        a.setExpectedValue(expectedValue);
+        a.setIsEnabled(1);
+        return a;
     }
 
     private EndpointDefinition endpoint(Integer id) {
