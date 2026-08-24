@@ -31,3 +31,21 @@ brick:
   mock-commerce:
     enabled: ${MOCK_COMMERCE_ENABLED:true}
     port: ${MOCK_COMMERCE_PORT:9090}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: Brick Platform
+    description: API workflow automation platform
+    version: ${APP_VERSION:1.0-SNAPSHOT}

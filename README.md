@@ -16,6 +16,8 @@ The companion web application is available in [brick-platform-frontend](https://
 - Separate transport and business outcomes: HTTP execution can succeed while assertions fail
 - Status-code, JSONPath, response-header, and response-time assertions with immutable execution snapshots
 - Test-suite execution, run history, failed-flow reruns, and node-level request/response diagnostics
+- Consistent JSON errors with meaningful HTTP status codes and validation at the API boundary
+- Health and service information endpoints for operational checks
 - A self-contained mock commerce API for a reproducible end-to-end demonstration
 
 ## Architecture
@@ -70,6 +72,7 @@ Optional configuration:
 | `DB_URL` | `jdbc:mysql://localhost:3306/brick_platform?...` | JDBC connection URL |
 | `SERVER_PORT` | `8080` | Spring Boot HTTP port |
 | `APP_TIME_ZONE` | `Pacific/Auckland` | API date/time zone |
+| `APP_VERSION` | `1.0-SNAPSHOT` | Version exposed by the service information endpoint |
 | `MOCK_COMMERCE_ENABLED` | `true` | Start the built-in demonstration API |
 | `MOCK_COMMERCE_PORT` | `9090` | Demonstration API port |
 | `APP_LOG_LEVEL` | `INFO` | Application logging level |
@@ -81,6 +84,8 @@ mvn spring-boot:run
 ```
 
 The Brick API is served from `http://localhost:8080/api/brick`. With the default settings, the mock API specification is available at `http://localhost:9090/openapi.json`.
+
+Operational checks are exposed at `http://localhost:8080/api/actuator/health` and `http://localhost:8080/api/actuator/info`.
 
 ## Reproduce the demo
 

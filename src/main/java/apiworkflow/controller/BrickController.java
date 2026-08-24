@@ -137,8 +137,8 @@ public class BrickController {
             @RequestParam Integer swaggerMappingId,
             @RequestParam(required = false) String method,
             @RequestParam(required = false) String keyword,
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "1") @Min(1) int pageNum,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(200) int pageSize) {
 
         int offset = (pageNum - 1) * pageSize;
         List<EndpointDefinition> rows = apiService.selectEndpointPageBySwaggerMappingId(
@@ -185,8 +185,8 @@ public class BrickController {
     @GetMapping("/flows")
     public ApiResponse<Map<String, Object>> getFlows(
             BrickFlow query,
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(defaultValue = "1") @Min(1) int pageNum,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(200) int pageSize,
             @RequestParam(required = false) Integer endpointId,
             @RequestParam(required = false) Integer grpcEndpointId,
             @RequestParam(required = false) String executionStatus) {
@@ -289,8 +289,8 @@ public class BrickController {
             @RequestParam(required = false) String batchId,
             @RequestParam(required = false) Integer runType,
             @RequestParam(defaultValue = "false") Boolean distinctLatest,
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "1") @Min(1) int pageNum,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(200) int pageSize) {
 
         int offset = (pageNum - 1) * pageSize;
         List<Map<String, Object>> rows = flowService.listRunsBySwaggerMappingId(
@@ -327,8 +327,8 @@ public class BrickController {
     public ApiResponse<Map<String, Object>> getTestSuites(
             @RequestParam Integer swaggerMappingId,
             @RequestParam(required = false) String keyword,
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "1") @Min(1) int pageNum,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(200) int pageSize) {
 
         int offset = (pageNum - 1) * pageSize;
         List<BrickTestSuite> list = testSuiteService.listTestSuitesBySwaggerMappingId(
@@ -383,8 +383,8 @@ public class BrickController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "1") @Min(1) int pageNum,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(200) int pageSize) {
 
         int offset = (pageNum - 1) * pageSize;
         List<Map<String, Object>> rows = testSuiteService.listRunsBySwaggerMappingId(

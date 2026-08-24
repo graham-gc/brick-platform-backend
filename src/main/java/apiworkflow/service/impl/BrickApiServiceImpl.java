@@ -4,6 +4,7 @@ import apiworkflow.entity.AppSwaggerMapping;
 import apiworkflow.entity.EndpointDefinition;
 import apiworkflow.entity.EndpointSchema;
 import apiworkflow.entity.SwaggerSyncLog;
+import apiworkflow.exception.ResourceNotFoundException;
 import apiworkflow.mapper.AppSwaggerMappingMapper;
 import apiworkflow.mapper.EndpointDefinitionMapper;
 import apiworkflow.mapper.EndpointSchemaMapper;
@@ -124,7 +125,7 @@ public class BrickApiServiceImpl implements IBrickApiService {
         Date startTime = new Date();
         AppSwaggerMapping mapping = swaggerMappingMapper.selectById(swaggerMappingId);
         if (mapping == null) {
-            throw new RuntimeException("Swagger mapping not found: " + swaggerMappingId);
+            throw new ResourceNotFoundException("Swagger mapping not found: " + swaggerMappingId);
         }
 
         String syncOperator = StringUtils.hasText(operator) ? operator : "system";
@@ -236,9 +237,12 @@ public class BrickApiServiceImpl implements IBrickApiService {
     @Override
     public Map<String, Object> getEndpointDetail(Integer endpointId) {
         EndpointDefinition endpoint = endpointDefinitionMapper.selectById(endpointId);
+        if (endpoint == null) {
+            throw new ResourceNotFoundException("Endpoint not found: " + endpointId);
+        }
         Map<String, Object> result = new HashMap<>();
         result.put("endpoint", endpoint);
-        if (endpoint == null || !StringUtils.hasText(endpoint.getRequestDefinitionJson())) {
+        if (!StringUtils.hasText(endpoint.getRequestDefinitionJson())) {
             result.put("requestDefinition", null);
             result.put("resolvedRequestDefinition", null);
             return result;

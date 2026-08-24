@@ -2,6 +2,7 @@ package apiworkflow.service.impl;
 
 import apiworkflow.dto.BrickFlowFullNode;
 import apiworkflow.entity.*;
+import apiworkflow.exception.ResourceNotFoundException;
 import apiworkflow.execution.AssertionExecutor;
 import apiworkflow.execution.FlowHttpExecutor;
 import apiworkflow.execution.FlowContextEngine;
@@ -302,6 +303,9 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     @Override
     public Map<String, Object> getFlowDetail(Integer id) {
         BrickFlow flow = flowMapper.selectById(id);
+        if (flow == null) {
+            throw new ResourceNotFoundException("Flow not found: " + id);
+        }
         List<BrickFlowNode> nodes = nodeMapper.selectByFlowId(id);
         List<BrickFlowEdge> edges = edgeMapper.selectByFlowId(id);
 
@@ -371,7 +375,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
                                  Map<String, String> customHeaders, Long suiteRunId) {
         BrickFlow flow = flowMapper.selectById(id);
         if (flow == null) {
-            throw new RuntimeException("Flow not found: " + id);
+            throw new ResourceNotFoundException("Flow not found: " + id);
         }
 
         String runOperator = StringUtils.hasText(operator) ? operator : "system";
@@ -734,6 +738,9 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     @Override
     public Map<String, Object> getRunDetail(Long runId) {
         BrickFlowRun run = runMapper.selectById(runId);
+        if (run == null) {
+            throw new ResourceNotFoundException("Flow run not found: " + runId);
+        }
         List<BrickFlowRunNode> nodes = runNodeMapper.selectByRunId(runId);
         Map<Long, List<BrickFlowRunNodeAssertion>> assertionsByRunNode = runAssertionMapper.selectByRunId(runId)
                 .stream()
@@ -781,7 +788,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     public int copyFlow(Integer sourceFlowId, String newName, String targetEnv, String operator, Integer targetSwaggerMappingId) {
         BrickFlow source = flowMapper.selectById(sourceFlowId);
         if (source == null) {
-            throw new RuntimeException("Source flow not found: " + sourceFlowId);
+            throw new ResourceNotFoundException("Source flow not found: " + sourceFlowId);
         }
 
         BrickFlow newFlow = new BrickFlow();
@@ -884,7 +891,12 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
 
     @Override
     public BrickFlowRunNode getNodeExecutionDetail(Long runId, Long nodeId) {
-        return runNodeMapper.selectByRunIdAndNodeId(runId, nodeId);
+        BrickFlowRunNode node = runNodeMapper.selectByRunIdAndNodeId(runId, nodeId);
+        if (node == null) {
+            throw new ResourceNotFoundException(
+                    "Flow run node not found: runId=" + runId + ", nodeId=" + nodeId);
+        }
+        return node;
     }
 
     @Override

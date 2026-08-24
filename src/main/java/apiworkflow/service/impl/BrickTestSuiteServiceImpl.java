@@ -1,6 +1,7 @@
 package apiworkflow.service.impl;
 
 import apiworkflow.entity.*;
+import apiworkflow.exception.ResourceNotFoundException;
 import apiworkflow.mapper.*;
 import apiworkflow.service.IBrickFlowService;
 import apiworkflow.service.IBrickTestSuiteService;
@@ -79,6 +80,9 @@ public class BrickTestSuiteServiceImpl implements IBrickTestSuiteService {
     @Override
     public Map<String, Object> getTestSuiteDetail(Integer id) {
         BrickTestSuite suite = testSuiteMapper.selectById(id);
+        if (suite == null) {
+            throw new ResourceNotFoundException("Test suite not found: " + id);
+        }
         List<BrickTestSuiteFlowMapping> flowMappings = flowMappingMapper.selectBySuiteId(id);
 
         List<Integer> flowIds = flowMappings.stream()
@@ -107,7 +111,7 @@ public class BrickTestSuiteServiceImpl implements IBrickTestSuiteService {
     public BrickTestSuiteRun runTestSuite(Integer id, String operator, Map<String, String> customHeaders) {
         BrickTestSuite suite = testSuiteMapper.selectById(id);
         if (suite == null) {
-            throw new RuntimeException("Test suite not found: " + id);
+            throw new ResourceNotFoundException("Test suite not found: " + id);
         }
 
         List<BrickTestSuiteFlowMapping> flowMappings = flowMappingMapper.selectBySuiteId(id);
@@ -170,12 +174,12 @@ public class BrickTestSuiteServiceImpl implements IBrickTestSuiteService {
     public BrickTestSuiteRun rerunFailedFlows(Long suiteRunId, String operator) {
         BrickTestSuiteRun suiteRun = suiteRunMapper.selectById(suiteRunId);
         if (suiteRun == null) {
-            throw new RuntimeException("Test suite run not found: " + suiteRunId);
+            throw new ResourceNotFoundException("Test suite run not found: " + suiteRunId);
         }
 
         BrickTestSuite suite = testSuiteMapper.selectById(suiteRun.getSuiteId());
         if (suite == null) {
-            throw new RuntimeException("Test suite not found: " + suiteRun.getSuiteId());
+            throw new ResourceNotFoundException("Test suite not found: " + suiteRun.getSuiteId());
         }
 
         Set<Integer> failedFlowIds = flowRunMapper.selectBySuiteRunId(suiteRunId).stream()
@@ -212,7 +216,7 @@ public class BrickTestSuiteServiceImpl implements IBrickTestSuiteService {
     public Map<String, Object> getRunDetail(Long runId) {
         BrickTestSuiteRun suiteRun = suiteRunMapper.selectById(runId);
         if (suiteRun == null) {
-            throw new RuntimeException("Test suite run not found: " + runId);
+            throw new ResourceNotFoundException("Test suite run not found: " + runId);
         }
         Map<String, Object> result = new HashMap<>();
         result.put("suiteRun", suiteRun);
