@@ -2,17 +2,24 @@ package apiworkflow.controller;
 
 import apiworkflow.dto.*;
 import apiworkflow.entity.*;
+import apiworkflow.exception.ResourceNotFoundException;
 import apiworkflow.service.*;
 import com.alibaba.fastjson.JSON;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import javax.validation.Valid;
+import javax.validation.constraints.Max;
+import javax.validation.constraints.Min;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/brick")
+@Validated
 public class BrickController {
 
     @Autowired
@@ -38,6 +45,9 @@ public class BrickController {
     @GetMapping("/mappings/{id}")
     public ApiResponse<AppSwaggerMapping> getMappingById(@PathVariable Integer id) {
         AppSwaggerMapping mapping = apiService.getById(id);
+        if (mapping == null) {
+            throw new ResourceNotFoundException("Swagger mapping not found: " + id);
+        }
         return ApiResponse.success(mapping);
     }
 
@@ -81,7 +91,11 @@ public class BrickController {
     // ==================== Swagger Sync APIs ====================
 
     @PostMapping("/validate-and-parse")
-    public ApiResponse<Map<String, Object>> validateAndParse(@RequestBody ValidateParseRequest request) {
+    public ApiResponse<Map<String, Object>> validateAndParse(@Valid @RequestBody ValidateParseRequest request) {
+        if (!StringUtils.hasText(request.getSwaggerFileContent())
+                && !StringUtils.hasText(request.getSwaggerUrl())) {
+            throw new IllegalArgumentException("Provide either a Swagger URL or Swagger JSON content");
+        }
         String jsonContent = request.getSwaggerFileContent();
         if (jsonContent == null && request.getSwaggerUrl() != null) {
             jsonContent = apiService.detectAndFetchSwaggerJson(request.getSwaggerUrl());
@@ -95,14 +109,14 @@ public class BrickController {
     }
 
     @PostMapping("/sync")
-    public ApiResponse<Map<String, Object>> sync(@RequestBody SyncRequest request) {
+    public ApiResponse<Map<String, Object>> sync(@Valid @RequestBody SyncRequest request) {
         AppSwaggerMapping mapping = request.getSwaggerMappingId() == null
                 ? apiService.getByEnvAppConfigAndVersion(
                         request.getEnv(), request.getAppConfigId(), request.getVersionTag())
                 : apiService.getById(request.getSwaggerMappingId());
 
         if (mapping == null) {
-            return ApiResponse.error("Swagger mapping not found");
+            throw new ResourceNotFoundException("Swagger mapping not found");
         }
 
         int count = apiService.syncEndpointDefinitionsBySwaggerMappingId(
@@ -202,14 +216,14 @@ public class BrickController {
     }
 
     @PostMapping("/flows")
-    public ApiResponse<BrickFlow> createFlow(@RequestBody FlowUpsertReq request) {
+    public ApiResponse<BrickFlow> createFlow(@Valid @RequestBody FlowUpsertReq request) {
         BrickFlow flow = request.getFlow();
         flowService.createFullFlow(flow, request.getNodes(), request.getEdges(), request.getOperator());
         return ApiResponse.success(flow);
     }
 
     @PostMapping("/flows/update")
-    public ApiResponse<Integer> updateFlow(@RequestBody FlowUpsertReq request) {
+    public ApiResponse<Integer> updateFlow(@Valid @RequestBody FlowUpsertReq request) {
         int result = flowService.updateFullFlow(request.getFlow(), request.getNodes(), request.getEdges(), request.getOperator());
         return ApiResponse.success(result);
     }
@@ -229,7 +243,7 @@ public class BrickController {
 
     @PostMapping("/flows/{flowId}/copy")
     public ApiResponse<Map<String, Object>> copyFlow(@PathVariable Integer flowId,
-                                                      @RequestBody CopyFlowRequest request) {
+                                                      @Valid @RequestBody CopyFlowRequest request) {
         int newFlowId = flowService.copyFlow(flowId, request.getNewName(),
                 request.getTargetEnv(), request.getOperator(), request.getTargetSwaggerMappingId());
 
@@ -241,7 +255,7 @@ public class BrickController {
     }
 
     @PostMapping("/flows/copy/batch")
-    public ApiResponse<Map<String, Object>> batchCopyFlows(@RequestBody BatchCopyFlowRequest request) {
+    public ApiResponse<Map<String, Object>> batchCopyFlows(@Valid @RequestBody BatchCopyFlowRequest request) {
         Map<String, Object> result = flowService.batchCopyFlows(
                 request.getFlowCopyItems(), request.getTargetEnv(), request.getOperator());
         return ApiResponse.success(result);
@@ -251,7 +265,7 @@ public class BrickController {
 
     @PostMapping("/flows/{id}/run")
     public ApiResponse<BrickFlowRun> runFlow(@PathVariable Integer id,
-                                              @RequestBody RunFlowReq request) {
+                                              @Valid @RequestBody RunFlowReq request) {
         BrickFlowRun run = flowService.runFlow(id, request.getOperator(),
                 request.getOverrideBaseUrl(), request.getRunType());
         return ApiResponse.success(run);
@@ -335,14 +349,14 @@ public class BrickController {
     }
 
     @PostMapping("/test-suites")
-    public ApiResponse<Integer> createTestSuite(@RequestBody TestSuiteUpsertReq request) {
+    public ApiResponse<Integer> createTestSuite(@Valid @RequestBody TestSuiteUpsertReq request) {
         int result = testSuiteService.createTestSuite(
                 request.getSuite(), request.getFlowMappings(), request.getOperator());
         return ApiResponse.success(result);
     }
 
     @PostMapping("/test-suites/update")
-    public ApiResponse<Integer> updateTestSuite(@RequestBody TestSuiteUpsertReq request) {
+    public ApiResponse<Integer> updateTestSuite(@Valid @RequestBody TestSuiteUpsertReq request) {
         int result = testSuiteService.updateTestSuite(
                 request.getSuite(), request.getFlowMappings(), request.getOperator());
         return ApiResponse.success(result);
@@ -409,6 +423,9 @@ public class BrickController {
     @GetMapping("/global-variables/{id}")
     public ApiResponse<BrickGlobalVariable> getGlobalVariableById(@PathVariable Long id) {
         BrickGlobalVariable variable = globalVariableService.getById(id);
+        if (variable == null) {
+            throw new ResourceNotFoundException("Global variable not found: " + id);
+        }
         return ApiResponse.success(variable);
     }
 
