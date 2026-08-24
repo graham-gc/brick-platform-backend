@@ -28,5 +28,7 @@ class BrickFlowRunMapperXmlTest {
         assertTrue(configuration.hasStatement(NAMESPACE + "countRunsBySwaggerMappingId"));
         assertTrue(configuration.hasStatement(NAMESPACE + "selectRunsByFlowId"));
         assertTrue(configuration.hasStatement(NAMESPACE + "countRunsByFlowId"));
+        assertTrue(configuration.hasStatement(NAMESPACE + "selectBySuiteRunId"));
+        assertTrue(configuration.hasStatement(NAMESPACE + "selectSummariesBySuiteRunId"));
     }
 }

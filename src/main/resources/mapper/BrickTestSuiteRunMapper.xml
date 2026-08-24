@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.BrickTestSuiteRunMapper">
+
+    <resultMap id="BaseResultMap" type="apiworkflow.entity.BrickTestSuiteRun">
+        <id column="id" property="id"/>
+        <result column="suite_id" property="suiteId"/>
+        <result column="status" property="status"/>
+        <result column="business_status" property="businessStatus"/>
+        <result column="operator" property="operator"/>
+        <result column="total_flows" property="totalFlows"/>
+        <result column="success_flows" property="successFlows"/>
+        <result column="failed_flows" property="failedFlows"/>
+        <result column="business_passed_flows" property="businessPassedFlows"/>
+        <result column="business_failed_flows" property="businessFailedFlows"/>
+        <result column="business_not_configured_flows" property="businessNotConfiguredFlows"/>
+        <result column="business_not_evaluated_flows" property="businessNotEvaluatedFlows"/>
+        <result column="duration_ms" property="durationMs"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="error_msg" property="errorMsg"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM brick_test_suite_run WHERE id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_test_suite_run (
+            suite_id, status, business_status, operator, total_flows,
+            success_flows, failed_flows, business_passed_flows,
+            business_failed_flows, business_not_configured_flows,
+            business_not_evaluated_flows, duration_ms, start_time, error_msg
+        ) VALUES (
+            #{suiteId}, #{status}, #{businessStatus}, #{operator}, #{totalFlows},
+            #{successFlows}, #{failedFlows}, #{businessPassedFlows},
+            #{businessFailedFlows}, #{businessNotConfiguredFlows},
+            #{businessNotEvaluatedFlows}, #{durationMs}, #{startTime}, #{errorMsg}
+        )
+    </insert>
+
+    <update id="updateById">
+        UPDATE brick_test_suite_run SET
+            status = #{status},
+            business_status = #{businessStatus},
+            total_flows = #{totalFlows},
+            success_flows = #{successFlows},
+            failed_flows = #{failedFlows},
+            business_passed_flows = #{businessPassedFlows},
+            business_failed_flows = #{businessFailedFlows},
+            business_not_configured_flows = #{businessNotConfiguredFlows},
+            business_not_evaluated_flows = #{businessNotEvaluatedFlows},
+            duration_ms = #{durationMs},
+            end_time = #{endTime},
+            error_msg = #{errorMsg},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectRunsByCondition" resultType="map">
+        SELECT r.id,
+               r.suite_id AS suiteId,
+               s.name AS suiteName,
+               s.swagger_mapping_id AS swaggerMappingId,
+               r.status,
+               r.business_status AS businessStatus,
+               r.operator,
+               r.total_flows AS totalFlows,
+               r.success_flows AS successFlows,
+               r.failed_flows AS failedFlows,
+               r.business_passed_flows AS businessPassedFlows,
+               r.business_failed_flows AS businessFailedFlows,
+               r.business_not_configured_flows AS businessNotConfiguredFlows,
+               r.business_not_evaluated_flows AS businessNotEvaluatedFlows,
+               r.duration_ms AS durationMs,
+               r.start_time AS startTime,
+               r.end_time AS endTime,
+               r.error_msg AS errorMsg
+        FROM brick_test_suite_run r
+        INNER JOIN brick_test_suite s ON s.id = r.suite_id
+        WHERE s.is_deleted = 0
+        <if test="testSuiteId != null">AND r.suite_id = #{testSuiteId}</if>
+        <if test="swaggerMappingId != null">AND s.swagger_mapping_id = #{swaggerMappingId}</if>
+        <if test="suiteName != null and suiteName != ''">AND s.name LIKE CONCAT('%', #{suiteName}, '%')</if>
+        <if test="status != null and status != ''">AND r.status = #{status}</if>
+        <if test="startDate != null and startDate != ''">AND r.start_time &gt;= #{startDate}</if>
+        <if test="endDate != null and endDate != ''">AND r.start_time &lt;= #{endDate}</if>
+        ORDER BY r.start_time DESC, r.id DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="countRunsByCondition" resultType="int">
+        SELECT COUNT(*)
+        FROM brick_test_suite_run r
+        INNER JOIN brick_test_suite s ON s.id = r.suite_id
+        WHERE s.is_deleted = 0
+        <if test="testSuiteId != null">AND r.suite_id = #{testSuiteId}</if>
+        <if test="swaggerMappingId != null">AND s.swagger_mapping_id = #{swaggerMappingId}</if>
+        <if test="suiteName != null and suiteName != ''">AND s.name LIKE CONCAT('%', #{suiteName}, '%')</if>
+        <if test="status != null and status != ''">AND r.status = #{status}</if>
+        <if test="startDate != null and startDate != ''">AND r.start_time &gt;= #{startDate}</if>
+        <if test="endDate != null and endDate != ''">AND r.start_time &lt;= #{endDate}</if>
+    </select>
+
+</mapper>

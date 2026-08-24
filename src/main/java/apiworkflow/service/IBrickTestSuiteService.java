@@ -32,8 +32,4 @@ public interface IBrickTestSuiteService {
                                      String suiteName, String status, String startDate, String endDate);
 
     Map<String, Object> getRunDetail(Long runId);
-
-    Map<String, Object> checkAndFixInterruption(Long runId);
-
-    Map<String, Object> getFlowResultsSummary(Long runId);
 }

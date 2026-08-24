@@ -8,6 +8,8 @@ import apiworkflow.execution.FlowContextEngine;
 import apiworkflow.mapper.*;
 import apiworkflow.service.IBrickFlowService;
 import com.alibaba.fastjson.JSON;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class BrickFlowServiceImpl implements IBrickFlowService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(BrickFlowServiceImpl.class);
 
     @Autowired
     private BrickFlowMapper flowMapper;
@@ -51,7 +55,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     private FlowContextEngine flowContextEngine;
 
     @Autowired
-    private apiworkflow.execution.AssertionExecutor assertionExecutor;
+    private AssertionExecutor assertionExecutor;
 
     @Override
     public BrickFlow getFlow(Integer id) {
@@ -374,6 +378,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
         BrickFlowRun run = new BrickFlowRun();
         run.setFlowId(id);
         run.setStatus("running");
+        run.setBusinessStatus("not_evaluated");
         run.setTriggeredBy(runOperator);
         run.setRunType(runType != null ? runType : 0);
         run.setOverrideBaseUrl(overrideBaseUrl);
@@ -386,6 +391,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
         }
 
         String finalStatus = "success";
+        String finalBusinessStatus = "not_evaluated";
         String errorMessage = null;
         try {
             List<BrickFlowNode> nodes = nodeMapper.selectByFlowId(id);
@@ -398,16 +404,20 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
                     run.getId(), flow, orderedNodes, edges, overrideBaseUrl, customHeaders);
             finalStatus = scheduleResult.failedCount == 0 && scheduleResult.blockedCount == 0
                     ? "success" : "failed";
+            finalBusinessStatus = scheduleResult.businessStatus(finalStatus);
             errorMessage = scheduleResult.errorMessage();
         } catch (Exception e) {
             finalStatus = "failed";
+            finalBusinessStatus = "not_evaluated";
             errorMessage = rootMessage(e);
         }
 
         Date endTime = new Date();
         long durationMs = endTime.getTime() - run.getStartTime().getTime();
-        runMapper.updateStatusAndDuration(run.getId(), finalStatus, durationMs, errorMessage);
+        runMapper.updateStatusAndDuration(
+                run.getId(), finalStatus, finalBusinessStatus, durationMs, errorMessage);
         run.setStatus(finalStatus);
+        run.setBusinessStatus(finalBusinessStatus);
         run.setDurationMs(durationMs);
         run.setErrorMsg(errorMessage);
         run.setEndTime(endTime);
@@ -465,10 +475,12 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
                         result.failedCount++;
                     }
                 }
+                initialiseBusinessStatus(runNode);
                 runNodeMapper.insert(runNode);
 
                 // Execute assertions after runNode is inserted (so we have runNode.id)
-                if (assertionExecutor != null && runNode.getId() != null) {
+                if ("success".equalsIgnoreCase(runNode.getStatus())
+                        && assertionExecutor != null && runNode.getId() != null) {
                     try {
                         Map<String, List<String>> responseHeaders = JSON.parseObject(runNode.getResponseHeaders(),
                                 new com.alibaba.fastjson.TypeReference<Map<String, List<String>>>() {});
@@ -480,6 +492,9 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
                         runNode.setAssertionTotalCount(assertionResult.total);
                         runNode.setAssertionPassedCount(assertionResult.passed);
                         runNode.setAssertionFailedCount(assertionResult.failed);
+                        runNode.setBusinessStatus(assertionResult.total == 0
+                                ? "not_configured"
+                                : assertionResult.failed == 0 ? "passed" : "failed");
                         StringBuilder summary = new StringBuilder();
                         for (apiworkflow.entity.BrickFlowRunNodeAssertion ra : assertionResult.runAssertions) {
                             if (summary.length() > 0) summary.append("; ");
@@ -490,7 +505,10 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
                         runNode.setAssertionSummary(summary.toString());
                         runNodeMapper.updateById(runNode);
                     } catch (Exception e) {
-                        // Assertion execution should not fail the node
+                        runNode.setBusinessStatus("not_evaluated");
+                        runNode.setAssertionSummary("Assertion evaluation failed: " + rootMessage(e));
+                        runNodeMapper.updateById(runNode);
+                        LOGGER.warn("Assertion evaluation failed for run node {}", runNode.getId(), e);
                     }
                 }
 
@@ -504,6 +522,14 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
             }
         }
         return result;
+    }
+
+    private void initialiseBusinessStatus(BrickFlowRunNode runNode) {
+        runNode.setAssertionTotalCount(0);
+        runNode.setAssertionPassedCount(0);
+        runNode.setAssertionFailedCount(0);
+        runNode.setBusinessStatus("success".equalsIgnoreCase(runNode.getStatus())
+                ? "not_configured" : "not_evaluated");
     }
 
     private NodeReadiness readiness(BrickFlowNode node, List<Long> parentIds, Map<Long, String> states) {
@@ -621,6 +647,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
         runNode.setEndpointId(node.getEndpointId());
         runNode.setGrpcEndpointId(node.getGrpcEndpointId());
         runNode.setStatus(status);
+        runNode.setBusinessStatus("not_evaluated");
         runNode.setStartTime(now);
         runNode.setEndTime(now);
         runNode.setDurationMs(0L);
@@ -640,12 +667,35 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     private static class FlowScheduleResult {
         private int failedCount;
         private int blockedCount;
+        private int businessPassedCount;
+        private int businessFailedCount;
+        private int businessNotEvaluatedCount;
         private final List<String> failures = new ArrayList<>();
 
         private void record(BrickFlowNode node, BrickFlowRunNode runNode) {
             if ("failed".equals(runNode.getStatus())) {
                 failures.add("Node " + node.getId() + " failed: " + runNode.getErrorMsg());
             }
+            if ("passed".equals(runNode.getBusinessStatus())) {
+                businessPassedCount++;
+            } else if ("failed".equals(runNode.getBusinessStatus())) {
+                businessFailedCount++;
+            } else if ("not_evaluated".equals(runNode.getBusinessStatus())) {
+                businessNotEvaluatedCount++;
+            }
+        }
+
+        private String businessStatus(String requestStatus) {
+            if (businessFailedCount > 0) {
+                return "failed";
+            }
+            if (!"success".equals(requestStatus) || businessNotEvaluatedCount > 0) {
+                return "not_evaluated";
+            }
+            if (businessPassedCount > 0) {
+                return "passed";
+            }
+            return "not_configured";
         }
 
         private String errorMessage() {

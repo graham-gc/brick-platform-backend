@@ -28,6 +28,12 @@
         LIMIT #{offset}, #{pageSize}
     </select>
 
+    <select id="countBySwaggerMappingId" resultType="int">
+        SELECT COUNT(*) FROM brick_test_suite
+        WHERE swagger_mapping_id = #{swaggerMappingId} AND is_deleted = 0
+        <if test="keyword != null and keyword != ''">AND name LIKE CONCAT('%', #{keyword}, '%')</if>
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO brick_test_suite (
             name, env, swagger_mapping_id, app_config_id, description, is_deleted, create_by, create_time

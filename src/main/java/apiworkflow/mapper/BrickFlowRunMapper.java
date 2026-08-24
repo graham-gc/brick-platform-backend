@@ -12,10 +12,15 @@ public interface BrickFlowRunMapper {
 
     List<BrickFlowRun> selectByFlowId(Integer flowId);
 
+    List<BrickFlowRun> selectBySuiteRunId(Long suiteRunId);
+
+    List<Map<String, Object>> selectSummariesBySuiteRunId(Long suiteRunId);
+
     int insert(BrickFlowRun record);
 
     int updateStatusAndDuration(@Param("id") Long id,
                                  @Param("status") String status,
+                                 @Param("businessStatus") String businessStatus,
                                  @Param("durationMs") Long durationMs,
                                  @Param("errorMsg") String errorMsg);
 

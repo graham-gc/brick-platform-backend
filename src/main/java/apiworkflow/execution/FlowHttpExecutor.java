@@ -18,7 +18,6 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -39,9 +38,6 @@ public class FlowHttpExecutor {
     private static final Pattern PATH_VARIABLE = Pattern.compile("\\{([^{}]+)}");
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
     private static final int RESPONSE_PREVIEW_LENGTH = 800;
-
-    @Autowired
-    private AssertionExecutor assertionExecutor;
 
     public BrickFlowRunNode execute(Long runId, BrickFlow flow, BrickFlowNode node,
                                     EndpointDefinition endpoint, String overrideBaseUrl,
@@ -103,12 +99,10 @@ public class FlowHttpExecutor {
             result.setFullResponse(response.body);
             result.setResponsePreview(preview(response.body));
             result.setResponseSize(response.body.getBytes(StandardCharsets.UTF_8).length);
-            if (response.statusCode >= 200 && response.statusCode < 400) {
-                result.setStatus("success");
-            } else {
-                result.setStatus("failed");
-                result.setErrorMsg("HTTP " + response.statusCode);
-            }
+            // Receiving an HTTP response means the request execution itself succeeded.
+            // Whether the status code and response content are acceptable is a separate
+            // business-validation concern handled by node assertions.
+            result.setStatus("success");
         } catch (Exception e) {
             result.setStatus("failed");
             result.setErrorMsg(rootMessage(e));

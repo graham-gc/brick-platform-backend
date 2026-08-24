@@ -13,6 +13,7 @@ public class BrickFlowRunNode implements Serializable {
     private Integer endpointId;
     private Integer grpcEndpointId;
     private String status;
+    private String businessStatus;
     private Integer httpStatus;
     private Long durationMs;
     private Date startTime;

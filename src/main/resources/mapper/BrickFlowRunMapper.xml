@@ -6,6 +6,7 @@
         <id column="id" property="id"/>
         <result column="flow_id" property="flowId"/>
         <result column="status" property="status"/>
+        <result column="business_status" property="businessStatus"/>
         <result column="triggered_by" property="triggeredBy"/>
         <result column="run_type" property="runType"/>
         <result column="duration_ms" property="durationMs"/>
@@ -30,10 +31,34 @@
         SELECT * FROM brick_flow_run WHERE flow_id = #{flowId} ORDER BY create_time DESC
     </select>
 
+    <select id="selectBySuiteRunId" resultMap="BaseResultMap">
+        SELECT * FROM brick_flow_run
+        WHERE suite_run_id = #{suiteRunId}
+        ORDER BY start_time, id
+    </select>
+
+    <select id="selectSummariesBySuiteRunId" resultType="map">
+        SELECT r.id,
+               r.flow_id AS flowId,
+               f.name AS flowName,
+               r.status,
+               r.business_status AS businessStatus,
+               r.duration_ms AS durationMs,
+               r.error_msg AS errorMsg,
+               r.start_time AS startTime,
+               r.end_time AS endTime,
+               r.triggered_by AS triggeredBy
+        FROM brick_flow_run r
+        INNER JOIN brick_flow f ON f.id = r.flow_id
+        WHERE r.suite_run_id = #{suiteRunId}
+        ORDER BY r.start_time, r.id
+    </select>
+
     <select id="selectRunsBySwaggerMappingId" resultType="map">
         SELECT r.id,
                r.flow_id AS flowId,
                r.status,
+               r.business_status AS businessStatus,
                r.triggered_by AS triggeredBy,
                r.run_type AS runType,
                r.duration_ms AS durationMs,
@@ -86,6 +111,7 @@
         SELECT id,
                flow_id AS flowId,
                status,
+               business_status AS businessStatus,
                triggered_by AS triggeredBy,
                run_type AS runType,
                duration_ms AS durationMs,
@@ -118,10 +144,10 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO brick_flow_run (
-            flow_id, status, triggered_by, run_type, duration_ms, error_msg,
+            flow_id, status, business_status, triggered_by, run_type, duration_ms, error_msg,
             override_base_url, start_time, suite_run_id, batch_id, remark, create_by
         ) VALUES (
-            #{flowId}, #{status}, #{triggeredBy}, #{runType}, #{durationMs}, #{errorMsg},
+            #{flowId}, #{status}, #{businessStatus}, #{triggeredBy}, #{runType}, #{durationMs}, #{errorMsg},
             #{overrideBaseUrl}, #{startTime}, #{suiteRunId}, #{batchId}, #{remark}, #{createBy}
         )
     </insert>
@@ -129,6 +155,7 @@
     <update id="updateStatusAndDuration">
         UPDATE brick_flow_run SET
             status = #{status},
+            business_status = #{businessStatus},
             duration_ms = #{durationMs},
             error_msg = #{errorMsg},
             end_time = NOW()

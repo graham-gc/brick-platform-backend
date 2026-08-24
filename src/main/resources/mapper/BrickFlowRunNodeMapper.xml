@@ -9,6 +9,7 @@
         <result column="endpoint_id" property="endpointId"/>
         <result column="grpc_endpoint_id" property="grpcEndpointId"/>
         <result column="status" property="status"/>
+        <result column="business_status" property="businessStatus"/>
         <result column="http_status" property="httpStatus"/>
         <result column="duration_ms" property="durationMs"/>
         <result column="start_time" property="startTime"/>
@@ -46,13 +47,13 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO brick_flow_run_node (
-            run_id, node_id, endpoint_id, grpc_endpoint_id, status, http_status,
+            run_id, node_id, endpoint_id, grpc_endpoint_id, status, business_status, http_status,
             duration_ms, start_time, end_time, request_method, request_url, request_headers,
             request_body, request_query_params, request_path_params, response_headers,
             response_preview, full_response, response_size, error_msg,
             assertion_total_count, assertion_passed_count, assertion_failed_count, assertion_summary
         ) VALUES (
-            #{runId}, #{nodeId}, #{endpointId}, #{grpcEndpointId}, #{status}, #{httpStatus},
+            #{runId}, #{nodeId}, #{endpointId}, #{grpcEndpointId}, #{status}, #{businessStatus}, #{httpStatus},
             #{durationMs}, #{startTime}, #{endTime}, #{requestMethod}, #{requestUrl}, #{requestHeaders},
             #{requestBody}, #{requestQueryParams}, #{requestPathParams}, #{responseHeaders},
             #{responsePreview}, #{fullResponse}, #{responseSize}, #{errorMsg},
@@ -63,6 +64,7 @@
     <update id="updateById">
         UPDATE brick_flow_run_node SET
             status = #{status},
+            business_status = #{businessStatus},
             http_status = #{httpStatus},
             duration_ms = #{durationMs},
             end_time = #{endTime},

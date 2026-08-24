@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="apiworkflow.mapper.BrickTestSuiteFlowMappingMapper">
+
+    <resultMap id="BaseResultMap" type="apiworkflow.entity.BrickTestSuiteFlowMapping">
+        <id column="id" property="id"/>
+        <result column="suite_id" property="suiteId"/>
+        <result column="flow_id" property="flowId"/>
+        <result column="execution_order" property="executionOrder"/>
+        <result column="is_deleted" property="isDeleted"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectBySuiteId" resultMap="BaseResultMap">
+        SELECT * FROM brick_test_suite_flow_mapping
+        WHERE suite_id = #{suiteId} AND is_deleted = 0
+        ORDER BY execution_order, id
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_test_suite_flow_mapping (
+            suite_id, flow_id, execution_order, is_deleted, create_by, create_time
+        ) VALUES (
+            #{suiteId}, #{flowId}, #{executionOrder}, #{isDeleted}, #{createBy}, NOW()
+        )
+    </insert>
+
+    <insert id="batchInsert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO brick_test_suite_flow_mapping (
+            suite_id, flow_id, execution_order, is_deleted, create_by, create_time
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.suiteId}, #{item.flowId}, #{item.executionOrder},
+             #{item.isDeleted}, #{item.createBy}, NOW())
+        </foreach>
+    </insert>
+
+    <delete id="deleteBySuiteId">
+        DELETE FROM brick_test_suite_flow_mapping WHERE suite_id = #{suiteId}
+    </delete>
+
+</mapper>

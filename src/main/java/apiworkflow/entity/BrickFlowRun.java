@@ -9,6 +9,7 @@ public class BrickFlowRun implements Serializable {
     private Long id;
     private Integer flowId;
     private String status;
+    private String businessStatus;
     private String triggeredBy;
     private Integer runType;
     private Long durationMs;

@@ -8,6 +8,7 @@ import apiworkflow.entity.BrickFlowNodeAssertion;
 import apiworkflow.entity.BrickFlowRun;
 import apiworkflow.entity.BrickFlowRunNode;
 import apiworkflow.entity.EndpointDefinition;
+import apiworkflow.execution.AssertionExecutor;
 import apiworkflow.execution.FlowHttpExecutor;
 import apiworkflow.execution.FlowContextEngine;
 import apiworkflow.mapper.BrickFlowEdgeMapper;
@@ -69,6 +70,9 @@ class BrickFlowServiceImplTest {
 
     @Mock
     private FlowHttpExecutor flowHttpExecutor;
+
+    @Mock
+    private AssertionExecutor assertionExecutor;
 
     private BrickFlowServiceImpl service;
 
@@ -247,13 +251,15 @@ class BrickFlowServiceImplTest {
         BrickFlowRun run = service.runFlow(12, "graham", null, 0);
 
         assertEquals("success", run.getStatus());
+        assertEquals("not_configured", run.getBusinessStatus());
         ArgumentCaptor<BrickFlowNode> executionOrder = ArgumentCaptor.forClass(BrickFlowNode.class);
         verify(flowHttpExecutor, times(2)).execute(eq(501L), eq(flow), executionOrder.capture(),
                 any(EndpointDefinition.class), isNull(), isNull(), anyString());
         assertEquals(Long.valueOf(101L), executionOrder.getAllValues().get(0).getId());
         assertEquals(Long.valueOf(102L), executionOrder.getAllValues().get(1).getId());
         verify(runNodeMapper, times(2)).insert(any(BrickFlowRunNode.class));
-        verify(runMapper).updateStatusAndDuration(eq(501L), eq("success"), any(Long.class), isNull());
+        verify(runMapper).updateStatusAndDuration(
+                eq(501L), eq("success"), eq("not_configured"), any(Long.class), isNull());
     }
 
     @Test
@@ -303,6 +309,7 @@ class BrickFlowServiceImplTest {
         BrickFlowRun run = service.runFlow(flow.getId(), "graham", null, 0);
 
         assertEquals("failed", run.getStatus());
+        assertEquals("not_evaluated", run.getBusinessStatus());
         assertEquals("Node 102 failed: upstream failed; 1 downstream node was not executed", run.getErrorMsg());
         verify(flowHttpExecutor).execute(eq(501L), eq(flow), eq(healthyChild),
                 any(EndpointDefinition.class), isNull(), isNull(), anyString());
@@ -367,6 +374,38 @@ class BrickFlowServiceImplTest {
         assertEquals("success", run.getStatus());
         assertEquals("ord-2001", com.alibaba.fastjson.JSON.parseObject(target.getPathVarsJson())
                 .getString("orderId"));
+    }
+
+    @Test
+    void businessAssertionFailureDoesNotFailTheRequestOrBlockDownstreamNodes() {
+        BrickFlow flow = runnableFlow(12, 501L);
+        BrickFlowNode source = node(101L, 1);
+        BrickFlowNode target = node(102L, 2);
+        when(nodeMapper.selectByFlowId(12)).thenReturn(Arrays.asList(source, target));
+        when(edgeMapper.selectByFlowId(12)).thenReturn(
+                Collections.singletonList(edge(301L, 101L, 102L)));
+        mockSuccessfulEndpoints(1, 2);
+
+        AtomicLong runNodeIds = new AtomicLong(901L);
+        when(runNodeMapper.insert(any(BrickFlowRunNode.class))).thenAnswer(invocation -> {
+            BrickFlowRunNode runNode = invocation.getArgument(0);
+            runNode.setId(runNodeIds.getAndIncrement());
+            return 1;
+        });
+        ReflectionTestUtils.setField(service, "assertionExecutor", assertionExecutor);
+        when(assertionExecutor.executeAssertions(any(Long.class), eq(101L), any(), any(), any(), any()))
+                .thenReturn(new AssertionExecutor.AssertionResult(
+                        1, 0, 1, Collections.emptyList()));
+        when(assertionExecutor.executeAssertions(any(Long.class), eq(102L), any(), any(), any(), any()))
+                .thenReturn(new AssertionExecutor.AssertionResult(
+                        0, 0, 0, Collections.emptyList()));
+
+        BrickFlowRun run = service.runFlow(flow.getId(), "graham", null, 0);
+
+        assertEquals("success", run.getStatus());
+        assertEquals("failed", run.getBusinessStatus());
+        verify(flowHttpExecutor).execute(eq(501L), eq(flow), eq(target),
+                any(EndpointDefinition.class), isNull(), isNull(), anyString());
     }
 
     private BrickFlow runnableFlow(Integer flowId, Long runId) {

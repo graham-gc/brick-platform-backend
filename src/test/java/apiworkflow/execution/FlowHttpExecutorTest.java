@@ -71,6 +71,15 @@ class FlowHttpExecutorTest {
                 .getJSONObject("data").getString("status"));
     }
 
+    @Test
+    void treatsAnHttpErrorResponseAsASuccessfulRequestExecution() {
+        BrickFlowRunNode unauthorised = execute(new BrickFlow(), "GET", "/products",
+                null, null, null, null);
+
+        assertEquals("success", unauthorised.getStatus());
+        assertEquals(Integer.valueOf(401), unauthorised.getHttpStatus());
+    }
+
     private BrickFlowRunNode execute(BrickFlow flow, String method, String path,
                                      String headers, String query, String pathVariables, String body) {
         BrickFlowNode node = new BrickFlowNode();

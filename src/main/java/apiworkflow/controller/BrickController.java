@@ -343,7 +343,7 @@ public class BrickController {
         int total = testSuiteService.countTestSuitesBySwaggerMappingId(swaggerMappingId, keyword);
 
         Map<String, Object> result = new HashMap<>();
-        result.put("list", list);
+        result.put("rows", list);
         result.put("total", total);
         result.put("pages", (total + pageSize - 1) / pageSize);
         return ApiResponse.success(result);
@@ -417,12 +417,6 @@ public class BrickController {
         String operator = (String) request.get("operator");
         BrickTestSuiteRun run = testSuiteService.rerunFailedFlows(suiteRunId, operator);
         return ApiResponse.success(run);
-    }
-
-    @PostMapping("/test-suites/runs/{runId}/checkInterruption")
-    public ApiResponse<Map<String, Object>> checkInterruption(@PathVariable Long runId) {
-        Map<String, Object> result = testSuiteService.checkAndFixInterruption(runId);
-        return ApiResponse.success(result);
     }
 
     // ==================== Global Variable APIs ====================

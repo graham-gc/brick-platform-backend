@@ -8,7 +8,7 @@ spring:
     name: BrickPlatform
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/brick_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:3306/brick_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Pacific/Auckland
     username: root
     password: root
   jackson:
