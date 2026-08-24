@@ -112,7 +112,7 @@ public class AssertionExecutor {
                     break;
 
                 case "header":
-                    List<String> headerValues = responseHeaders.get(fieldPath);
+                    List<String> headerValues = findHeaderValues(responseHeaders, fieldPath);
                     if (headerValues != null && !headerValues.isEmpty()) {
                         actualValue = headerValues.get(0);
                         passed = compareString(actualValue, operator, expectedValue);
@@ -138,6 +138,18 @@ public class AssertionExecutor {
         runAssertion.setStatus(passed ? "passed" : "failed");
 
         return runAssertion;
+    }
+
+    private List<String> findHeaderValues(Map<String, List<String>> headers, String expectedName) {
+        if (headers == null || expectedName == null) {
+            return null;
+        }
+        for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(expectedName)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private boolean compareByType(Object actual, String operator, String expected) {

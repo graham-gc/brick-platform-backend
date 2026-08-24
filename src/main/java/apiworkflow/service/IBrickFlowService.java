@@ -45,9 +45,6 @@ public interface IBrickFlowService {
 
     BrickFlowRun runFlow(Integer id, String operator, String overrideBaseUrl, Integer runType, Map<String, String> customHeaders, Long suiteRunId);
 
-    BrickFlowRun runFlowWithCustomNodeParams(Integer id, String operator, String overrideBaseUrl, Integer runType,
-                                              Long nodeId, Integer endpointId, Integer grpcEndpointId, Map<String, Object> customNodeParams);
-
     Map<String, Object> getRunDetail(Long runId);
 
     List<Map<String, Object>> listRunsBySwaggerMappingId(Integer swaggerMappingId, String flowName, String flowNameLike,

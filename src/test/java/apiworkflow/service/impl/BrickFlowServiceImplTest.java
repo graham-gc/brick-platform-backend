@@ -7,6 +7,7 @@ import apiworkflow.entity.BrickFlowNode;
 import apiworkflow.entity.BrickFlowNodeAssertion;
 import apiworkflow.entity.BrickFlowRun;
 import apiworkflow.entity.BrickFlowRunNode;
+import apiworkflow.entity.BrickFlowRunNodeAssertion;
 import apiworkflow.entity.EndpointDefinition;
 import apiworkflow.execution.AssertionExecutor;
 import apiworkflow.execution.FlowHttpExecutor;
@@ -30,14 +31,18 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -209,6 +214,11 @@ class BrickFlowServiceImplTest {
 
         List<BrickFlowNode> sourceNodes = Arrays.asList(node(101L, 25), node(102L, 25));
         when(nodeMapper.selectByFlowId(12)).thenReturn(sourceNodes);
+        BrickFlowNodeAssertion sourceAssertion = assertion("json_path", "$.data.id", "equals", "order-1");
+        sourceAssertion.setId(401L);
+        sourceAssertion.setNodeId(101L);
+        when(nodeAssertionMapper.selectByNodeId(101L)).thenReturn(Collections.singletonList(sourceAssertion));
+        when(nodeAssertionMapper.selectByNodeId(102L)).thenReturn(Collections.emptyList());
         assignGeneratedNodeIdsStartingAt(201L);
 
         BrickFlowEdge sourceEdge = edge(301L, 101L, 102L);
@@ -222,6 +232,45 @@ class BrickFlowServiceImplTest {
         assertEquals(Integer.valueOf(13), copiedEdge.getFlowId());
         assertEquals(Long.valueOf(201L), copiedEdge.getSourceNodeId());
         assertEquals(Long.valueOf(202L), copiedEdge.getTargetNodeId());
+
+        ArgumentCaptor<List<BrickFlowNodeAssertion>> assertionsCaptor = assertionListCaptor();
+        verify(nodeAssertionMapper).batchInsert(assertionsCaptor.capture());
+        BrickFlowNodeAssertion copiedAssertion = assertionsCaptor.getValue().get(0);
+        assertNull(copiedAssertion.getId());
+        assertEquals(Long.valueOf(201L), copiedAssertion.getNodeId());
+        assertEquals("json_path", copiedAssertion.getAssertionType());
+        assertEquals("$.data.id", copiedAssertion.getFieldPath());
+        assertEquals("equals", copiedAssertion.getOperator());
+        assertEquals("order-1", copiedAssertion.getExpectedValue());
+    }
+
+    @Test
+    void runDetailUsesPersistedAssertionSnapshotsWithoutReadingCurrentConfiguration() {
+        BrickFlowRun run = new BrickFlowRun();
+        run.setId(501L);
+        BrickFlowRunNode runNode = new BrickFlowRunNode();
+        runNode.setId(901L);
+        runNode.setRunId(501L);
+        BrickFlowRunNodeAssertion snapshot = new BrickFlowRunNodeAssertion();
+        snapshot.setRunNodeId(901L);
+        snapshot.setAssertionId(401L);
+        snapshot.setAssertionType("json_path");
+        snapshot.setFieldPath("$.data.id");
+        snapshot.setOperator("equals");
+        snapshot.setExpectedValue("order-1");
+
+        when(runMapper.selectById(501L)).thenReturn(run);
+        when(runNodeMapper.selectByRunId(501L)).thenReturn(Collections.singletonList(runNode));
+        when(runAssertionMapper.selectByRunId(501L)).thenReturn(Collections.singletonList(snapshot));
+
+        Map<String, Object> detail = service.getRunDetail(501L);
+
+        @SuppressWarnings("unchecked")
+        List<BrickFlowRunNode> resultNodes = (List<BrickFlowRunNode>) detail.get("nodes");
+        assertEquals(1, resultNodes.size());
+        assertEquals("$.data.id", resultNodes.get(0).getAssertions().get(0).getFieldPath());
+        verify(runAssertionMapper).selectByRunId(501L);
+        verify(nodeAssertionMapper, never()).selectById(anyLong());
     }
 
     @Test
@@ -489,6 +538,11 @@ class BrickFlowServiceImplTest {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private ArgumentCaptor<List<BrickFlowEdge>> edgeListCaptor() {
+        return (ArgumentCaptor) ArgumentCaptor.forClass(List.class);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private ArgumentCaptor<List<BrickFlowNodeAssertion>> assertionListCaptor() {
         return (ArgumentCaptor) ArgumentCaptor.forClass(List.class);
     }
 }

@@ -13,15 +13,20 @@ public interface BrickFlowRunNodeAssertionMapper {
     @Select("SELECT * FROM brick_flow_run_node_assertion WHERE run_node_id = #{runNodeId}")
     List<BrickFlowRunNodeAssertion> selectByRunNodeId(Long runNodeId);
 
-    @Insert("INSERT INTO brick_flow_run_node_assertion (run_node_id, assertion_id, status, actual_value, expected_value, error_msg, create_time) " +
-            "VALUES (#{runNodeId}, #{assertionId}, #{status}, #{actualValue}, #{expectedValue}, #{errorMsg}, #{createTime})")
+    @Select("SELECT a.* FROM brick_flow_run_node_assertion a " +
+            "INNER JOIN brick_flow_run_node n ON n.id = a.run_node_id " +
+            "WHERE n.run_id = #{runId} ORDER BY a.id")
+    List<BrickFlowRunNodeAssertion> selectByRunId(Long runId);
+
+    @Insert("INSERT INTO brick_flow_run_node_assertion (run_node_id, assertion_id, assertion_type, field_path, operator, status, actual_value, expected_value, error_msg, create_time) " +
+            "VALUES (#{runNodeId}, #{assertionId}, #{assertionType}, #{fieldPath}, #{operator}, #{status}, #{actualValue}, #{expectedValue}, #{errorMsg}, #{createTime})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(BrickFlowRunNodeAssertion record);
 
     @Insert("<script>" +
-            "INSERT INTO brick_flow_run_node_assertion (run_node_id, assertion_id, status, actual_value, expected_value, error_msg, create_time) VALUES " +
+            "INSERT INTO brick_flow_run_node_assertion (run_node_id, assertion_id, assertion_type, field_path, operator, status, actual_value, expected_value, error_msg, create_time) VALUES " +
             "<foreach collection='list' item='item' separator=','>" +
-            "(#{item.runNodeId}, #{item.assertionId}, #{item.status}, #{item.actualValue}, #{item.expectedValue}, #{item.errorMsg}, #{item.createTime})" +
+            "(#{item.runNodeId}, #{item.assertionId}, #{item.assertionType}, #{item.fieldPath}, #{item.operator}, #{item.status}, #{item.actualValue}, #{item.expectedValue}, #{item.errorMsg}, #{item.createTime})" +
             "</foreach>" +
             "</script>")
     int batchInsert(@Param("list") List<BrickFlowRunNodeAssertion> list);

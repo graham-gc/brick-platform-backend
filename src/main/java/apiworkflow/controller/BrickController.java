@@ -257,27 +257,6 @@ public class BrickController {
         return ApiResponse.success(run);
     }
 
-    @PostMapping("/flows/{id}/run-custom")
-    public ApiResponse<BrickFlowRun> runFlowCustom(@PathVariable Integer id,
-                                                    @RequestBody RunFlowCustomReq request) {
-        BrickFlowRun run = flowService.runFlowWithCustomNodeParams(id, null,
-                request.getOverrideBaseUrl(), request.getRunType(), request.getNodeId(),
-                request.getEndpointId(), request.getGrpcEndpointId(), request.getCustomParams());
-        return ApiResponse.success(run);
-    }
-
-    @PostMapping("/flows/batch-run")
-    public ApiResponse<Map<String, Object>> batchRunFlows(@RequestBody Map<String, Object> request) {
-        @SuppressWarnings("unchecked")
-        List<Integer> flowIds = (List<Integer>) request.get("flowIds");
-        String overrideBaseUrl = (String) request.get("overrideBaseUrl");
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("batchId", System.currentTimeMillis());
-        result.put("totalCount", flowIds.size());
-        return ApiResponse.success(result);
-    }
-
     @GetMapping("/flows/runs/{runId}")
     public ApiResponse<Map<String, Object>> getRunDetail(@PathVariable Long runId) {
         Map<String, Object> detail = flowService.getRunDetail(runId);

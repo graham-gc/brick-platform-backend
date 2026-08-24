@@ -14,7 +14,7 @@ public class BrickFlowRunNodeAssertion implements Serializable {
     private String expectedValue;
     private String errorMsg;
     private Date createTime;
-    // 原始断言配置，仅用于API返回，不存入数据库
+    // Immutable assertion configuration snapshot captured when the node ran.
     private String assertionType;
     private String fieldPath;
     private String operator;

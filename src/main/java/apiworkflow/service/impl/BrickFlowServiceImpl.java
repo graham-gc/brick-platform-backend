@@ -732,32 +732,14 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
     }
 
     @Override
-    public BrickFlowRun runFlowWithCustomNodeParams(Integer id, String operator, String overrideBaseUrl, Integer runType,
-                                                     Long nodeId, Integer endpointId, Integer grpcEndpointId,
-                                                     Map<String, Object> customNodeParams) {
-        return runFlow(id, operator, overrideBaseUrl, runType);
-    }
-
-    @Override
     public Map<String, Object> getRunDetail(Long runId) {
         BrickFlowRun run = runMapper.selectById(runId);
         List<BrickFlowRunNode> nodes = runNodeMapper.selectByRunId(runId);
-
-        // Load assertions for each node and enrich with original config
+        Map<Long, List<BrickFlowRunNodeAssertion>> assertionsByRunNode = runAssertionMapper.selectByRunId(runId)
+                .stream()
+                .collect(Collectors.groupingBy(BrickFlowRunNodeAssertion::getRunNodeId));
         for (BrickFlowRunNode node : nodes) {
-            List<BrickFlowRunNodeAssertion> assertions = runAssertionMapper.selectByRunNodeId(node.getId());
-            // Enrich with original assertion config
-            for (BrickFlowRunNodeAssertion assertion : assertions) {
-                if (assertion.getAssertionId() != null) {
-                    BrickFlowNodeAssertion original = nodeAssertionMapper.selectById(assertion.getAssertionId());
-                    if (original != null) {
-                        assertion.setAssertionType(original.getAssertionType());
-                        assertion.setFieldPath(original.getFieldPath());
-                        assertion.setOperator(original.getOperator());
-                    }
-                }
-            }
-            node.setAssertions(assertions);
+            node.setAssertions(assertionsByRunNode.getOrDefault(node.getId(), Collections.emptyList()));
         }
 
         Map<String, Object> result = new HashMap<>();
@@ -819,12 +801,50 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
         int result = flowMapper.insert(newFlow);
 
         List<BrickFlowNode> nodes = nodeMapper.selectByFlowId(sourceFlowId);
+        Map<Long, List<BrickFlowNodeAssertion>> sourceAssertionsByNodeId = loadNodeAssertions(nodes);
         Map<Long, Long> nodeIdMap = insertNewNodes(newFlow.getId(), nodes, operator);
+        copyNodeAssertions(sourceAssertionsByNodeId, nodeIdMap);
 
         List<BrickFlowEdge> edges = edgeMapper.selectByFlowId(sourceFlowId);
         replaceEdges(newFlow.getId(), edges, nodeIdMap, operator, false);
 
         return result;
+    }
+
+    private Map<Long, List<BrickFlowNodeAssertion>> loadNodeAssertions(List<BrickFlowNode> sourceNodes) {
+        Map<Long, List<BrickFlowNodeAssertion>> assertionsByNodeId = new LinkedHashMap<>();
+        for (BrickFlowNode sourceNode : sourceNodes) {
+            assertionsByNodeId.put(sourceNode.getId(), nodeAssertionMapper.selectByNodeId(sourceNode.getId()));
+        }
+        return assertionsByNodeId;
+    }
+
+    private void copyNodeAssertions(Map<Long, List<BrickFlowNodeAssertion>> sourceAssertionsByNodeId,
+                                    Map<Long, Long> nodeIdMap) {
+        Date now = new Date();
+        List<BrickFlowNodeAssertion> copiedAssertions = new ArrayList<>();
+        for (Map.Entry<Long, List<BrickFlowNodeAssertion>> entry : sourceAssertionsByNodeId.entrySet()) {
+            Long sourceNodeId = entry.getKey();
+            Long copiedNodeId = nodeIdMap.get(sourceNodeId);
+            if (copiedNodeId == null) {
+                throw new IllegalStateException("Copied node id is missing for source node " + sourceNodeId);
+            }
+            for (BrickFlowNodeAssertion sourceAssertion : entry.getValue()) {
+                BrickFlowNodeAssertion copiedAssertion = new BrickFlowNodeAssertion();
+                copiedAssertion.setNodeId(copiedNodeId);
+                copiedAssertion.setAssertionType(sourceAssertion.getAssertionType());
+                copiedAssertion.setFieldPath(sourceAssertion.getFieldPath());
+                copiedAssertion.setOperator(sourceAssertion.getOperator());
+                copiedAssertion.setExpectedValue(sourceAssertion.getExpectedValue());
+                copiedAssertion.setIsEnabled(sourceAssertion.getIsEnabled());
+                copiedAssertion.setCreateTime(now);
+                copiedAssertion.setUpdateTime(now);
+                copiedAssertions.add(copiedAssertion);
+            }
+        }
+        if (!copiedAssertions.isEmpty()) {
+            nodeAssertionMapper.batchInsert(copiedAssertions);
+        }
     }
 
     @Override
