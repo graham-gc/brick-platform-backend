@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
   servlet:
     context-path: /api
 
@@ -8,26 +8,26 @@ spring:
     name: BrickPlatform
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/brick_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Pacific/Auckland
-    username: root
-    password: root
+    url: ${DB_URL:jdbc:mysql://localhost:3306/brick_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Pacific/Auckland}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
-    time-zone: Asia/Shanghai
+    time-zone: ${APP_TIME_ZONE:Pacific/Auckland}
 
 mybatis:
   mapper-locations: classpath:mapper/**/*.xml
   type-aliases-package: apiworkflow.entity
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 logging:
   level:
-    apiworkflow: DEBUG
-    org.springframework: INFO
+    apiworkflow: ${APP_LOG_LEVEL:INFO}
+    org.springframework: ${SPRING_LOG_LEVEL:INFO}
 
 brick:
   mock-commerce:
-    enabled: true
-    port: 9090
+    enabled: ${MOCK_COMMERCE_ENABLED:true}
+    port: ${MOCK_COMMERCE_PORT:9090}
