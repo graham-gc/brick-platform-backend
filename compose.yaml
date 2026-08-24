@@ -1,0 +1,63 @@
+name: brick-platform
+
+services:
+  database:
+    image: mysql:8.0
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: brick_platform
+      MYSQL_USER: ${DB_USERNAME:-brick}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-brick_local_dev}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-brick_root_local_dev}
+      TZ: Pacific/Auckland
+    ports:
+      - "${DB_PORT:-3307}:3306"
+    volumes:
+      - brick_mysql_data:/var/lib/mysql
+      - ./src/main/resources/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping --silent -h localhost -u$${MYSQL_USER} -p$${MYSQL_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:mysql://database:3306/brick_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Pacific/Auckland
+      DB_USERNAME: ${DB_USERNAME:-brick}
+      DB_PASSWORD: ${DB_PASSWORD:-brick_local_dev}
+      APP_VERSION: docker
+      MOCK_COMMERCE_ENABLED: "true"
+      MOCK_COMMERCE_PORT: "9090"
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+      - "${MOCK_COMMERCE_PORT:-9090}:9090"
+    depends_on:
+      database:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: "${FRONTEND_BUILD_CONTEXT:-https://github.com/graham-gc/brick-platform-frontend.git#main}"
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://backend:8080/api/brick
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  brick_mysql_data:

@@ -5,6 +5,7 @@ import apiworkflow.entity.*;
 import apiworkflow.exception.ResourceNotFoundException;
 import apiworkflow.service.*;
 import com.alibaba.fastjson.JSON;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
@@ -20,6 +21,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/brick")
 @Validated
+@Tag(name = "Brick Platform", description = "Swagger import, flow design, execution, assertions, and reporting")
 public class BrickController {
 
     @Autowired

@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+.claude
+docs
+target
+*.iml
+*.log
+.DS_Store
+.env

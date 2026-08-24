@@ -24,3 +24,6 @@ jobs:
 
       - name: Verify backend
         run: mvn --batch-mode --no-transfer-progress verify
+
+      - name: Build container image
+        run: docker build --tag brick-platform-backend:ci .

@@ -24,6 +24,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <mybatis.version>3.5.13</mybatis.version>
         <mybatis-spring-boot.version>2.2.2</mybatis-spring-boot.version>
+        <springdoc.version>1.8.0</springdoc.version>
     </properties>
 
     <dependencies>
@@ -43,6 +44,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Runtime API documentation for Spring Boot 2.x -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
 
         <!-- MyBatis -->

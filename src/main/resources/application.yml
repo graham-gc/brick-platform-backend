@@ -23,6 +23,8 @@ mybatis:
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [requestId=%X{requestId:-}] %logger{36} - %msg%n"
   level:
     apiworkflow: ${APP_LOG_LEVEL:INFO}
     org.springframework: ${SPRING_LOG_LEVEL:INFO}
@@ -31,6 +33,15 @@ brick:
   mock-commerce:
     enabled: ${MOCK_COMMERCE_ENABLED:true}
     port: ${MOCK_COMMERCE_PORT:9090}
+
+springdoc:
+  packages-to-scan: apiworkflow.controller
+  swagger-ui:
+    path: /swagger-ui.html
+    display-request-duration: true
+    filter: true
+    operations-sorter: method
+    try-it-out-enabled: true
 
 management:
   endpoints:
