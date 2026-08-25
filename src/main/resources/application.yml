@@ -8,9 +8,12 @@ spring:
     name: BrickPlatform
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: ${DB_URL:jdbc:mysql://localhost:3306/brick_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Pacific/Auckland}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/brick_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Pacific/Auckland}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+    hikari:
+      data-source-properties:
+        allowPublicKeyRetrieval: ${DB_ALLOW_PUBLIC_KEY_RETRIEVAL:true}
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: ${APP_TIME_ZONE:Pacific/Auckland}

@@ -26,6 +26,14 @@ API checks previously existed as separate scripts that had to be started and man
 - **Safe defaults:** credentials stay outside source control, logs avoid sensitive payloads, SQL variables are read-only, and the public project contains synthetic data only.
 - **Maintainable scope:** enterprise identity and distributed scheduling are documented as future boundaries rather than represented by incomplete placeholder features.
 
+## Product preview
+
+The companion frontend provides the visual contract-to-execution workflow. Its [README contains the complete screenshot walkthrough](https://github.com/graham-gc/brick-platform-frontend#product-preview).
+
+![Brick Platform visual flow designer](https://raw.githubusercontent.com/graham-gc/brick-platform-frontend/main/public/screenshots/03-flow-designer.png)
+
+![Execution report separating successful HTTP requests from a failed business assertion](https://raw.githubusercontent.com/graham-gc/brick-platform-frontend/main/public/screenshots/08-business-failure.png)
+
 ## What this project demonstrates
 
 ### Contract ingestion
