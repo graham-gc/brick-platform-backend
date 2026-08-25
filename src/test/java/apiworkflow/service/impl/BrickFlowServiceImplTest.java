@@ -12,6 +12,7 @@ import apiworkflow.entity.EndpointDefinition;
 import apiworkflow.execution.AssertionExecutor;
 import apiworkflow.execution.FlowHttpExecutor;
 import apiworkflow.execution.FlowContextEngine;
+import apiworkflow.execution.GlobalVariableEngine;
 import apiworkflow.mapper.BrickFlowEdgeMapper;
 import apiworkflow.mapper.BrickFlowMapper;
 import apiworkflow.mapper.BrickFlowNodeAssertionMapper;
@@ -79,6 +80,9 @@ class BrickFlowServiceImplTest {
     @Mock
     private AssertionExecutor assertionExecutor;
 
+    @Mock
+    private GlobalVariableEngine globalVariableEngine;
+
     private BrickFlowServiceImpl service;
 
     @BeforeEach
@@ -94,6 +98,7 @@ class BrickFlowServiceImplTest {
         ReflectionTestUtils.setField(service, "endpointDefinitionMapper", endpointDefinitionMapper);
         ReflectionTestUtils.setField(service, "flowHttpExecutor", flowHttpExecutor);
         ReflectionTestUtils.setField(service, "flowContextEngine", new FlowContextEngine());
+        ReflectionTestUtils.setField(service, "globalVariableEngine", globalVariableEngine);
     }
 
     @Test

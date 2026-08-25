@@ -44,6 +44,10 @@
         SELECT * FROM brick_global_variable WHERE type = #{type} AND is_enabled = 1
     </select>
 
+    <select id="selectEnabled" resultMap="BaseResultMap">
+        SELECT * FROM brick_global_variable WHERE is_enabled = 1 ORDER BY name ASC
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO brick_global_variable (
             name, type, description, config, is_enabled, category, syntax,

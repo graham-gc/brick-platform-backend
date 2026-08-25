@@ -6,6 +6,7 @@ import apiworkflow.exception.ResourceNotFoundException;
 import apiworkflow.execution.AssertionExecutor;
 import apiworkflow.execution.FlowHttpExecutor;
 import apiworkflow.execution.FlowContextEngine;
+import apiworkflow.execution.GlobalVariableEngine;
 import apiworkflow.mapper.*;
 import apiworkflow.service.IBrickFlowService;
 import com.alibaba.fastjson.JSON;
@@ -54,6 +55,9 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
 
     @Autowired
     private FlowContextEngine flowContextEngine;
+
+    @Autowired
+    private GlobalVariableEngine globalVariableEngine;
 
     @Autowired
     private AssertionExecutor assertionExecutor;
@@ -444,6 +448,7 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
         List<BrickFlowNode> pending = new ArrayList<>(nodes);
         pending.sort(Comparator.comparing(BrickFlowNode::getId));
         Map<String, Object> context = new LinkedHashMap<>();
+        Map<String, BrickGlobalVariable> globalVariables = globalVariableEngine.loadEnabledVariables();
         FlowScheduleResult result = new FlowScheduleResult();
         while (!pending.isEmpty()) {
             boolean progressed = false;
@@ -463,9 +468,12 @@ public class BrickFlowServiceImpl implements IBrickFlowService {
                     result.blockedCount++;
                 } else {
                     try {
+                        globalVariableEngine.resolveNode(node, globalVariables);
                         flowContextEngine.applyBindings(node, context);
+                        String globalSharedHeaders = globalVariableEngine.resolveDocument(
+                                flow.getSharedHeadersJson(), globalVariables, "shared headers");
                         String effectiveSharedHeaders = flowContextEngine.resolveSharedHeaders(
-                                flow.getSharedHeadersJson(), context);
+                                globalSharedHeaders, context);
                         runNode = executeNode(runId, flow, node, overrideBaseUrl,
                                 customHeaders, effectiveSharedHeaders);
                         if ("success".equalsIgnoreCase(runNode.getStatus())) {

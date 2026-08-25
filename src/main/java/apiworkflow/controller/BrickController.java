@@ -3,6 +3,7 @@ package apiworkflow.controller;
 import apiworkflow.dto.*;
 import apiworkflow.entity.*;
 import apiworkflow.exception.ResourceNotFoundException;
+import apiworkflow.execution.GlobalVariableDataSourceRegistry;
 import apiworkflow.service.*;
 import com.alibaba.fastjson.JSON;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,6 +36,9 @@ public class BrickController {
 
     @Autowired
     private IGlobalVariableService globalVariableService;
+
+    @Autowired
+    private GlobalVariableDataSourceRegistry globalVariableDataSourceRegistry;
 
     // ==================== Swagger Mapping APIs ====================
 
@@ -415,6 +419,11 @@ public class BrickController {
     }
 
     // ==================== Global Variable APIs ====================
+
+    @GetMapping("/global-variables/data-sources")
+    public ApiResponse<List<GlobalVariableDataSourceDescriptor>> getGlobalVariableDataSources() {
+        return ApiResponse.success(globalVariableDataSourceRegistry.list());
+    }
 
     @GetMapping("/global-variables")
     public ApiResponse<List<BrickGlobalVariable>> getGlobalVariables(BrickGlobalVariable query) {

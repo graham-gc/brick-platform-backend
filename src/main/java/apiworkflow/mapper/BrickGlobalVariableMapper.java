@@ -15,6 +15,8 @@ public interface BrickGlobalVariableMapper {
 
     List<BrickGlobalVariable> selectByType(String type);
 
+    List<BrickGlobalVariable> selectEnabled();
+
     int insert(BrickGlobalVariable record);
 
     int updateById(BrickGlobalVariable record);
