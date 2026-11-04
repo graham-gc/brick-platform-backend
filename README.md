@@ -6,6 +6,12 @@ Brick Platform turns Swagger/OpenAPI contracts into executable API workflows. Us
 
 This repository contains the Spring Boot execution service. The visual application is in [brick-platform-frontend](https://github.com/graham-gc/brick-platform-frontend).
 
+## Documentation
+
+- [Development guide](docs/development.md): local and Docker setup, service addresses, source map, execution semantics, and troubleshooting.
+- [Flow save contract](docs/flow-save-frontend-contract.md): the implemented frontend/backend contract, including temporary IDs, assertions, responses, and acceptance checks.
+- [Frontend development guide](https://github.com/graham-gc/brick-platform-frontend/blob/main/docs/development.md): the BFF proxy, canvas state, and UI checks.
+
 ## Project background
 
 Brick is a clean-room portfolio reconstruction of an internal engineering-productivity platform that I independently designed and delivered while working in a commercial technology team.
@@ -87,16 +93,19 @@ flowchart LR
 
 ### Execution lifecycle
 
+Runs execute synchronously in the calling HTTP request. The current scheduler processes ready nodes sequentially, and a Test Suite processes its flows in order. Branching describes dependency relationships; it does not imply parallel execution. `ALL` and `ANY` joins use request-execution status. An assertion failure is reported separately and does not block downstream nodes.
+
 ```mermaid
 flowchart TD
-    LOAD["Load flow, nodes and edges"] --> READY["Find executable nodes"]
+    LOAD["Load flow, nodes and edges"] --> READY["Find executable nodes and mark blocked dependencies"]
     READY --> RESOLVE["Resolve global and flow variables"]
     RESOLVE --> REQUEST["Build and send HTTP request"]
     REQUEST --> TRANSPORT{"Transport succeeded?"}
-    TRANSPORT -->|No| BLOCK["Record failure and block dependent paths"]
+    TRANSPORT -->|No| FAILURE["Record request failure"]
     TRANSPORT -->|Yes| EXTRACT["Extract response variables"]
     EXTRACT --> ASSERT["Evaluate business assertions"]
     ASSERT --> SNAPSHOT["Persist request, response and assertion snapshot"]
+    FAILURE --> SNAPSHOT
     SNAPSHOT --> READY
 ```
 
@@ -139,6 +148,14 @@ docker compose up --build
 
 By default, Compose builds the public frontend repository directly from GitHub. When both repositories are available locally, set `FRONTEND_BUILD_CONTEXT` in `.env` to the absolute frontend directory.
 
+For a one-command override, run this from the backend checkout:
+
+```bash
+FRONTEND_BUILD_CONTEXT=/absolute/path/to/brick-platform-frontend docker compose up --build
+```
+
+The following addresses assume the default ports in `.env.example`:
+
 | Service | URL |
 | --- | --- |
 | Web application | `http://localhost:3000` |
@@ -146,8 +163,12 @@ By default, Compose builds the public frontend repository directly from GitHub. 
 | Backend information | `http://localhost:8080/api/actuator/info` |
 | Swagger UI | `http://localhost:8080/api/swagger-ui.html` |
 | Generated OpenAPI JSON | `http://localhost:8080/api/v3/api-docs/brick-platform` |
-| Mock commerce OpenAPI | `http://localhost:9090/openapi.json` |
+| Mock commerce OpenAPI, as reached by the backend | `http://localhost:9090/openapi.json` |
 | MySQL | `localhost:3307` |
+
+The mock is started inside the backend process and binds to `127.0.0.1`. In Docker, import its URL through **Swagger Mappings**; the backend can fetch its own loopback address. The published `9090` port does not make this loopback listener reachable directly from the host. Use the backend health endpoint and Brick's import workflow to check the stack.
+
+Compose initialises `schema.sql` only when its MySQL data directory is empty. An existing database volume is retained across restarts; editing the schema file does not migrate existing tables. See [database lifecycle](docs/development.md#database-lifecycle).
 
 Stop the stack while retaining its data:
 
@@ -160,8 +181,8 @@ Use `docker compose down -v` only when a completely fresh demonstration database
 ## Ten-minute product walkthrough
 
 1. Open `http://localhost:3000/mappings`.
-2. Create a mapping from `http://localhost:9090/openapi.json` using environment `dev` and version `local`.
-3. Synchronise it, then inspect the imported endpoint and recursively resolved schema definitions.
+2. Create a mapping from `http://localhost:9090/openapi.json` using environment `dev` and version `local`. The backend fetches this URL and creation automatically imports the endpoints.
+3. Inspect the imported endpoint and recursively resolved schema definitions. Use synchronisation later to refresh an existing mapping.
 4. Create a flow: `Login -> List Products -> Create Order -> Pay Order -> Get Order`.
 5. Extract the login token, product ID, and order ID, then bind them into downstream headers, request bodies, and path parameters.
 6. Add transport and business assertions, execute the flow, and inspect the result drawer and run history.
@@ -170,6 +191,8 @@ Use `docker compose down -v` only when a completely fresh demonstration database
 The mock login accepts `demo.user` / `demo-password`. Protected endpoints expect `Authorization: Bearer mock-access-token`.
 
 ### Global-variable examples
+
+Create and enable these variables in **Global Variables** before referencing them; the names below are examples, not seeded built-ins. The UI currently disables the unimplemented `BUILTIN` type.
 
 ```text
 ${{baseUrl}}
@@ -184,7 +207,7 @@ Function variables execute a user-defined JavaScript function body with declared
 
 ### Prerequisites
 
-- JDK 8
+- JDK 8 (the code imports `jdk.nashorn` directly; a newer JDK is not a drop-in replacement)
 - Maven 3.8 or later
 - MySQL 8
 
@@ -216,6 +239,8 @@ mvn spring-boot:run
 
 The main API is served from `http://localhost:8080/api/brick`.
 
+Spring Boot does not automatically load the Compose `.env` file. Export the database variables in the shell used to start Maven. The native default is MySQL port `3306`; the database published by Compose defaults to `3307`, so set `DB_URL` accordingly when mixing a native backend with a Docker database. A complete command sequence is in the [development guide](docs/development.md#native-development-with-a-docker-database).
+
 ## Testing and CI
 
 ```bash
@@ -223,6 +248,8 @@ mvn test
 ```
 
 The automated suite covers contract parsing, recursive schema resolution, variable extraction and binding, global functions, read-only database variables, HTTP execution, branching, assertions, flow copying, execution snapshots, test-suite orchestration, mapper SQL, API metadata, and request correlation.
+
+Tests use mocks, H2, and a temporary loopback HTTP server; they do not require a running MySQL instance. The HTTP tests need permission to bind a local ephemeral port. On 2026-11-04, all 72 tests passed with JDK 8. This is a dated local baseline, not an end-to-end UI or Docker verification.
 
 GitHub Actions runs Maven verification and builds the production container image on pushes to `main` and pull requests.
 
@@ -252,6 +279,7 @@ src/main/resources/
   mapper/       MyBatis XML statements
   schema.sql    complete MySQL schema
 examples/       demonstration OpenAPI document
+docs/           development guide and frontend/backend save contract
 ```
 
 ## Scope
