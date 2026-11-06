@@ -48,6 +48,7 @@ The companion frontend provides the visual contract-to-execution workflow. Its [
 - Checksum-based synchronisation and endpoint discovery
 - Mapping-scoped schema storage instead of duplicating schemas for every endpoint
 - Recursive `$ref` expansion for nested request, parameter, and response definitions
+- Read-only sync preview that links removed response fields to saved flow variables and assertions
 
 ### Workflow execution
 

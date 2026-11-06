@@ -125,6 +125,10 @@ Paths below are relative to `src/main/java/apiworkflow/`.
 
 The service root is `/api/brick`. Use the generated [Swagger UI](http://localhost:8080/api/swagger-ui.html) for the full endpoint inventory. Common API groups are `/mappings`, `/endpoints`, `/flows`, `/test-suites`, and `/global-variables`. The [save contract](flow-save-frontend-contract.md) documents the full-canvas replacement rules; it is particularly important when changing node IDs or assertions.
 
+`POST /api/brick/sync/preview` accepts the same request as `POST /api/brick/sync`. It reads the saved mapping, compares responses for the same operation, status and media type, and returns references from saved HTTP nodes to fields that the incoming schema no longer declares. Each result identifies the flow, node, response, and response variable or enabled JSONPath assertion. The preview does not update the mapping or run any flows.
+
+The preview checks simple property paths with optional array indexes or wildcards, for example `$.data.items[0].name`. Responses without comparable schemas, unresolved or composed schemas along the path, and complex JSONPath expressions are skipped. An empty result is not a full contract compatibility check.
+
 Flow and suite execution is synchronous in the HTTP request. A run row is created first and updated when execution finishes. The scheduler processes ready nodes sequentially. It supports DAG dependencies and `ALL`/`ANY` joins; it does not run independent branches in parallel. Only `http` nodes execute. Cycles or unsupported node types fail at runtime; fields referring to gRPC or conditions do not establish an implemented execution feature.
 
 For each ready node, the engine resolves global variables, applies available flow-variable bindings, resolves shared headers, sends the HTTP request, extracts response variables, and evaluates assertions. A transport failure blocks dependent paths according to their join strategy; independent eligible paths can continue. A missing flow variable can still fail at runtime if its producer has not executed, including on an `ANY` branch.

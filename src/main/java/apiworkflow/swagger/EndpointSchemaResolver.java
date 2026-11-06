@@ -12,6 +12,7 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 @Component
 public class EndpointSchemaResolver {
@@ -25,7 +26,12 @@ public class EndpointSchemaResolver {
     }
 
     public Object resolveValue(List<EndpointSchema> schemas, Object value) {
-        return resolveValue(value, schemasByRef(schemas), new ArrayDeque<String>());
+        return prepare(schemas).apply(value);
+    }
+
+    public Function<Object, Object> prepare(List<EndpointSchema> schemas) {
+        Map<String, Object> index = schemasByRef(schemas);
+        return value -> resolveValue(value, index, new ArrayDeque<String>());
     }
 
     private Map<String, Object> schemasByRef(List<EndpointSchema> schemas) {

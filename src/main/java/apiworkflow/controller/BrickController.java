@@ -29,6 +29,9 @@ public class BrickController {
     private IBrickApiService apiService;
 
     @Autowired
+    private SwaggerSyncImpactService swaggerSyncImpactService;
+
+    @Autowired
     private IBrickFlowService flowService;
 
     @Autowired
@@ -114,8 +117,7 @@ public class BrickController {
         return ApiResponse.success(result);
     }
 
-    @PostMapping("/sync")
-    public ApiResponse<Map<String, Object>> sync(@Valid @RequestBody SyncRequest request) {
+    private AppSwaggerMapping requireSyncMapping(SyncRequest request) {
         AppSwaggerMapping mapping = request.getSwaggerMappingId() == null
                 ? apiService.getByEnvAppConfigAndVersion(
                         request.getEnv(), request.getAppConfigId(), request.getVersionTag())
@@ -124,7 +126,19 @@ public class BrickController {
         if (mapping == null) {
             throw new ResourceNotFoundException("Swagger mapping not found");
         }
+        return mapping;
+    }
 
+    @PostMapping("/sync/preview")
+    public ApiResponse<List<SwaggerSyncImpact>> previewSync(@Valid @RequestBody SyncRequest request) {
+        AppSwaggerMapping mapping = requireSyncMapping(request);
+        return ApiResponse.success(swaggerSyncImpactService.preview(mapping.getId(), request.getSwaggerContent(),
+                request.getCustomHost(), request.getCustomBasePath()));
+    }
+
+    @PostMapping("/sync")
+    public ApiResponse<Map<String, Object>> sync(@Valid @RequestBody SyncRequest request) {
+        AppSwaggerMapping mapping = requireSyncMapping(request);
         int count = apiService.syncEndpointDefinitionsBySwaggerMappingId(
                 mapping.getId(), request.getSwaggerContent(), request.getOperator(),
                 request.getCustomHost(), request.getCustomBasePath());
