@@ -1,6 +1,10 @@
 package apiworkflow.service;
 
 import apiworkflow.dto.SwaggerSyncImpact;
+import apiworkflow.dto.SwaggerSyncPreviewReport;
+import apiworkflow.dto.SwaggerSyncPreviewReport.ContractVersion;
+import apiworkflow.dto.SwaggerSyncPreviewReport.Reason;
+import apiworkflow.dto.SwaggerSyncPreviewReport.UnassessedReference;
 import apiworkflow.entity.EndpointDefinition;
 import apiworkflow.mapper.EndpointDefinitionMapper;
 import apiworkflow.mapper.EndpointSchemaMapper;
@@ -43,12 +47,12 @@ public class SwaggerSyncImpactService {
     private final EndpointSchemaResolver schemaResolver;
 
     @Transactional(readOnly = true)
-    public List<SwaggerSyncImpact> preview(Integer mappingId, String swaggerContent,
-                                           String customHost, String customBasePath) {
+    public SwaggerSyncPreviewReport preview(Integer mappingId, String swaggerContent,
+                                            String customHost, String customBasePath) {
         ParsedSwaggerDocument incoming = parser.parse(swaggerContent, customHost, customBasePath);
         Map<Integer, List<Reference>> references = collectReferences(impactMapper.selectReferences(mappingId));
         if (references.isEmpty()) {
-            return Collections.emptyList();
+            return new SwaggerSyncPreviewReport(0, Collections.emptyList(), Collections.emptyList());
         }
 
         Map<String, EndpointDefinition> incomingByOperation = new HashMap<>();
@@ -57,30 +61,75 @@ public class SwaggerSyncImpactService {
         }
         Function<Object, Object> oldResolver = schemaResolver.prepare(schemaMapper.selectBySwaggerMappingId(mappingId));
         Function<Object, Object> newResolver = schemaResolver.prepare(incoming.getSchemas());
+        int checkedCount = 0;
         List<SwaggerSyncImpact> impacts = new ArrayList<>();
+        List<UnassessedReference> unassessed = new ArrayList<>();
         for (EndpointDefinition previous : endpointMapper.selectAllBySwaggerMappingId(mappingId, 0)) {
             List<Reference> endpointReferences = references.get(previous.getId());
-            EndpointDefinition next = incomingByOperation.get(operationKey(previous));
-            if (endpointReferences == null || next == null) {
+            if (endpointReferences == null) {
                 continue;
             }
-            Map<ResponseKey, JSONObject> oldResponses = responseSchemas(previous, oldResolver);
-            Map<ResponseKey, JSONObject> newResponses = responseSchemas(next, newResolver);
-            for (Map.Entry<ResponseKey, JSONObject> oldResponse : oldResponses.entrySet()) {
-                ResponseKey key = oldResponse.getKey();
-                JSONObject newSchema = newResponses.get(key);
-                if (newSchema == null) {
-                    continue;
-                }
-                for (Reference reference : endpointReferences) {
-                    if (locate(oldResponse.getValue(), reference.segments) == Presence.DECLARED
-                            && locate(newSchema, reference.segments) == Presence.MISSING) {
-                        impacts.add(reference.impact(previous, key));
-                    }
-                }
+            EndpointDefinition next = incomingByOperation.get(operationKey(previous));
+            Map<ResponseKey, ResponseSchema> oldResponses = responseSchemas(previous, oldResolver);
+            Map<ResponseKey, ResponseSchema> newResponses = next == null ? null : responseSchemas(next, newResolver);
+            for (Reference reference : endpointReferences) {
+                checkedCount += assessReference(previous, reference, oldResponses, newResponses, impacts, unassessed);
             }
         }
-        return impacts;
+        return new SwaggerSyncPreviewReport(checkedCount, impacts, unassessed);
+    }
+
+    private int assessReference(EndpointDefinition endpoint, Reference reference,
+                                Map<ResponseKey, ResponseSchema> oldResponses,
+                                Map<ResponseKey, ResponseSchema> newResponses,
+                                List<SwaggerSyncImpact> impacts, List<UnassessedReference> unassessed) {
+        if (reference.segments.isEmpty()) {
+            unassessed.add(reference.unassessed(endpoint, null, Reason.UNSUPPORTED_JSONPATH, null));
+            return 0;
+        }
+        if (newResponses == null) {
+            unassessed.add(reference.unassessed(endpoint, null, Reason.OPERATION_MISSING, ContractVersion.INCOMING));
+            return 0;
+        }
+        if (oldResponses.isEmpty()) {
+            unassessed.add(reference.unassessed(endpoint, null, Reason.NO_DOCUMENTED_RESPONSE, ContractVersion.CURRENT));
+            return 0;
+        }
+
+        int checkedCount = 0;
+        boolean hasCandidate = false;
+        for (Map.Entry<ResponseKey, ResponseSchema> entry : oldResponses.entrySet()) {
+            ResponseKey key = entry.getKey();
+            PathAssessment before = locate(entry.getValue(), reference.segments);
+            if (before == PathAssessment.MISSING) {
+                continue;
+            }
+            hasCandidate = true;
+            if (before.reason != null) {
+                unassessed.add(reference.unassessed(endpoint, key, before.reason, ContractVersion.CURRENT));
+                continue;
+            }
+
+            ResponseSchema newResponse = newResponses.get(key);
+            if (newResponse == null) {
+                unassessed.add(reference.unassessed(endpoint, key, Reason.RESPONSE_MISSING, ContractVersion.INCOMING));
+                continue;
+            }
+            PathAssessment after = locate(newResponse, reference.segments);
+            if (after.reason != null) {
+                unassessed.add(reference.unassessed(endpoint, key, after.reason, ContractVersion.INCOMING));
+                continue;
+            }
+
+            checkedCount++;
+            if (after == PathAssessment.MISSING) {
+                impacts.add(reference.detail(endpoint, key));
+            }
+        }
+        if (!hasCandidate) {
+            unassessed.add(reference.unassessed(endpoint, null, Reason.PATH_NOT_DECLARED, ContractVersion.CURRENT));
+        }
+        return checkedCount;
     }
 
     private Map<Integer, List<Reference>> collectReferences(List<ReferenceRow> rows) {
@@ -111,11 +160,8 @@ public class SwaggerSyncImpactService {
     private void addReference(Map<Integer, List<Reference>> references, ReferenceRow row,
                               String rawPath, String variableName, Long assertionId) {
         String path = rawPath == null ? "" : rawPath.trim();
-        List<String> segments = simplePathSegments(path);
-        if (!segments.isEmpty()) {
-            references.computeIfAbsent(row.getEndpointId(), key -> new ArrayList<>())
-                    .add(new Reference(row, path, segments, variableName, assertionId));
-        }
+        references.computeIfAbsent(row.getEndpointId(), key -> new ArrayList<>())
+                .add(new Reference(row, path, simplePathSegments(path), variableName, assertionId));
     }
 
     private List<String> simplePathSegments(String path) {
@@ -136,9 +182,9 @@ public class SwaggerSyncImpactService {
         return position == path.length() ? segments : Collections.emptyList();
     }
 
-    private Map<ResponseKey, JSONObject> responseSchemas(EndpointDefinition endpoint,
-                                                          Function<Object, Object> resolver) {
-        Map<ResponseKey, JSONObject> schemas = new LinkedHashMap<>();
+    private Map<ResponseKey, ResponseSchema> responseSchemas(EndpointDefinition endpoint,
+                                                              Function<Object, Object> resolver) {
+        Map<ResponseKey, ResponseSchema> schemas = new LinkedHashMap<>();
         Object definition = parseJson(endpoint.getRequestDefinitionJson());
         Object responses = definition instanceof JSONObject ? ((JSONObject) definition).get("responses") : null;
         if (!(responses instanceof JSONArray)) {
@@ -150,31 +196,41 @@ public class SwaggerSyncImpactService {
             }
             JSONObject response = (JSONObject) entry;
             String status = response.getString("statusCode");
-            if (!StringUtils.hasText(status) || !(response.get("schema") instanceof JSONObject)) {
+            if (!StringUtils.hasText(status)) {
+                continue;
+            }
+            ResponseKey key = new ResponseKey(status, response.getString("contentType"));
+            if (!(response.get("schema") instanceof JSONObject)) {
+                schemas.put(key, new ResponseSchema(null, PathAssessment.SCHEMA_MISSING));
                 continue;
             }
             try {
                 Object schema = resolver.apply(response.get("schema"));
                 if (schema instanceof JSONObject) {
-                    schemas.put(new ResponseKey(status, response.getString("contentType")), (JSONObject) schema);
+                    schemas.put(key, new ResponseSchema((JSONObject) schema, null));
+                } else {
+                    schemas.put(key, new ResponseSchema(null, PathAssessment.UNSPECIFIED_SCHEMA_SHAPE));
                 }
             } catch (IllegalArgumentException | IllegalStateException unresolved) {
-                // A missing or circular reference cannot establish a removed field.
+                schemas.put(key, new ResponseSchema(null, PathAssessment.UNRESOLVED_SCHEMA));
             }
         }
         return schemas;
     }
 
-    private Presence locate(JSONObject schema, List<String> segments) {
-        Object current = schema;
+    private PathAssessment locate(ResponseSchema response, List<String> segments) {
+        if (response.issue != null) {
+            return response.issue;
+        }
+        Object current = response.schema;
         for (String segment : segments) {
             if (!(current instanceof JSONObject)) {
-                return Presence.UNKNOWN;
+                return PathAssessment.UNSPECIFIED_SCHEMA_SHAPE;
             }
             JSONObject definition = (JSONObject) current;
             if (definition.containsKey("allOf") || definition.containsKey("anyOf")
                     || definition.containsKey("oneOf") || definition.containsKey("if")) {
-                return Presence.UNKNOWN;
+                return PathAssessment.COMPOSED_SCHEMA;
             }
             if (segment == null) {
                 current = definition.get("items");
@@ -182,15 +238,16 @@ public class SwaggerSyncImpactService {
             }
             Object properties = definition.get("properties");
             if (!(properties instanceof JSONObject)) {
-                return Presence.UNKNOWN;
+                return PathAssessment.UNSPECIFIED_SCHEMA_SHAPE;
             }
             JSONObject fields = (JSONObject) properties;
             if (!fields.containsKey(segment)) {
-                return Presence.MISSING;
+                return PathAssessment.MISSING;
             }
             current = fields.get(segment);
         }
-        return current instanceof JSONObject || current instanceof Boolean ? Presence.DECLARED : Presence.UNKNOWN;
+        return current instanceof JSONObject || current instanceof Boolean
+                ? PathAssessment.DECLARED : PathAssessment.UNSPECIFIED_SCHEMA_SHAPE;
     }
 
     private Object parseJson(String json) {
@@ -208,7 +265,23 @@ public class SwaggerSyncImpactService {
         return endpoint.getHttpMethod() + " " + endpoint.getEndpointPath();
     }
 
-    private enum Presence { DECLARED, MISSING, UNKNOWN }
+    @RequiredArgsConstructor
+    private enum PathAssessment {
+        DECLARED(null),
+        MISSING(null),
+        SCHEMA_MISSING(Reason.SCHEMA_MISSING),
+        UNRESOLVED_SCHEMA(Reason.UNRESOLVED_SCHEMA),
+        COMPOSED_SCHEMA(Reason.COMPOSED_SCHEMA),
+        UNSPECIFIED_SCHEMA_SHAPE(Reason.UNSPECIFIED_SCHEMA_SHAPE);
+
+        private final Reason reason;
+    }
+
+    @Value
+    private static class ResponseSchema {
+        JSONObject schema;
+        PathAssessment issue;
+    }
 
     @Value
     private static class ResponseKey {
@@ -224,11 +297,17 @@ public class SwaggerSyncImpactService {
         String variableName;
         Long assertionId;
 
-        SwaggerSyncImpact impact(EndpointDefinition endpoint, ResponseKey response) {
+        SwaggerSyncImpact detail(EndpointDefinition endpoint, ResponseKey response) {
             return new SwaggerSyncImpact(row.getFlowId(), row.getFlowName(), row.getNodeId(),
-                    endpoint.getHttpMethod(), endpoint.getEndpointPath(), response.status, response.contentType,
+                    endpoint.getHttpMethod(), endpoint.getEndpointPath(),
+                    response == null ? null : response.status, response == null ? null : response.contentType,
                     fieldPath, assertionId == null ? SwaggerSyncImpact.ReferenceType.RESPONSE_VARIABLE
                             : SwaggerSyncImpact.ReferenceType.ASSERTION, variableName, assertionId);
+        }
+
+        UnassessedReference unassessed(EndpointDefinition endpoint, ResponseKey response,
+                                       Reason reason, ContractVersion version) {
+            return new UnassessedReference(detail(endpoint, response), reason, version);
         }
     }
 }

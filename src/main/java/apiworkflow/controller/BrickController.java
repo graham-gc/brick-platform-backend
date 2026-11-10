@@ -131,9 +131,18 @@ public class BrickController {
 
     @PostMapping("/sync/preview")
     public ApiResponse<List<SwaggerSyncImpact>> previewSync(@Valid @RequestBody SyncRequest request) {
+        return ApiResponse.success(buildSyncPreview(request).getImpacts());
+    }
+
+    @PostMapping("/sync/preview/report")
+    public ApiResponse<SwaggerSyncPreviewReport> previewSyncReport(@Valid @RequestBody SyncRequest request) {
+        return ApiResponse.success(buildSyncPreview(request));
+    }
+
+    private SwaggerSyncPreviewReport buildSyncPreview(SyncRequest request) {
         AppSwaggerMapping mapping = requireSyncMapping(request);
-        return ApiResponse.success(swaggerSyncImpactService.preview(mapping.getId(), request.getSwaggerContent(),
-                request.getCustomHost(), request.getCustomBasePath()));
+        return swaggerSyncImpactService.preview(mapping.getId(), request.getSwaggerContent(),
+                request.getCustomHost(), request.getCustomBasePath());
     }
 
     @PostMapping("/sync")

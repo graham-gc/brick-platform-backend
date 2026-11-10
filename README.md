@@ -8,6 +8,7 @@ This repository contains the Spring Boot execution service. The visual applicati
 
 ## Documentation
 
+- [OpenAPI preview requirements (Chinese)](docs/openapi-impact-preview-requirements.md): how the preview distinguishes checked, affected, and unassessed references.
 - [Development guide](docs/development.md): local and Docker setup, service addresses, source map, execution semantics, and troubleshooting.
 - [Flow save contract](docs/flow-save-frontend-contract.md): the implemented frontend/backend contract, including temporary IDs, assertions, responses, and acceptance checks.
 - [Frontend development guide](https://github.com/graham-gc/brick-platform-frontend/blob/main/docs/development.md): the BFF proxy, canvas state, and UI checks.

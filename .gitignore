@@ -50,3 +50,4 @@ build/
 /docs/*
 !/docs/development.md
 !/docs/flow-save-frontend-contract.md
+!/docs/openapi-impact-preview-requirements.md

@@ -1,6 +1,11 @@
 package apiworkflow.service;
 
+import apiworkflow.controller.BrickController;
 import apiworkflow.dto.SwaggerSyncImpact;
+import apiworkflow.dto.SwaggerSyncPreviewReport;
+import apiworkflow.dto.SwaggerSyncPreviewReport.ContractVersion;
+import apiworkflow.dto.SwaggerSyncPreviewReport.Reason;
+import apiworkflow.entity.AppSwaggerMapping;
 import apiworkflow.entity.EndpointDefinition;
 import apiworkflow.mapper.EndpointDefinitionMapper;
 import apiworkflow.mapper.EndpointSchemaMapper;
@@ -8,6 +13,8 @@ import apiworkflow.mapper.SwaggerSyncImpactMapper;
 import apiworkflow.swagger.EndpointSchemaResolver;
 import apiworkflow.swagger.ParsedSwaggerDocument;
 import apiworkflow.swagger.SwaggerDocumentParser;
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import org.apache.ibatis.mapping.Environment;
 import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.session.SqlSession;
@@ -17,10 +24,14 @@ import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -32,14 +43,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class SwaggerSyncImpactServiceTest {
-    private static final String VARIABLES = "["
-            + "{\"name\":\"decision\",\"responsePath\":\"$.data.decision\"},"
+    private static final String VARIABLE_FIELDS = "{\"name\":\"decision\",\"responsePath\":\"$.data.decision\"},"
             + "{\"name\":\"reasons\",\"responsePath\":\"$.data.records[*].reason\"},"
-            + "{\"name\":\"retained\",\"responsePath\":\"$.data.records[0].retained\"},"
-            + "{\"name\":\"preexisting\",\"responsePath\":\"$.data.undeclared\"},"
-            + "{\"name\":\"complex\",\"responsePath\":\"$..decision\"}]";
+            + "{\"name\":\"retained\",\"responsePath\":\"$.data.records[0].retained\"}";
+    private static final String VARIABLES = "[" + VARIABLE_FIELDS + "]";
     private static final String SCHEMA = "{\"properties\":{\"data\":{\"properties\":{"
             + "\"decision\":{\"type\":\"string\"},\"records\":{\"items\":{\"properties\":{"
             + "\"reason\":{\"type\":\"string\"},\"retained\":{\"type\":\"string\"}}}}}}}}";
@@ -86,9 +98,14 @@ class SwaggerSyncImpactServiceTest {
     }
 
     @Test
-    void findsActiveReferencesToRemovedFieldsThroughSchemaRefsAndArrayItems() {
-        List<SwaggerSyncImpact> impacts = preview(contract("200", "application/json", UPDATED_SCHEMA));
+    void reportsRemovedFieldsAndUnassessedReferencesSeparately() {
+        new JdbcTemplate(database).update("UPDATE brick_flow_node SET response_variables_json = ? WHERE id = 101",
+                "[" + VARIABLE_FIELDS + ",{\"name\":\"preexisting\",\"responsePath\":\"$.data.undeclared\"},"
+                        + "{\"name\":\"complex\",\"responsePath\":\"$..decision\"}]");
+        SwaggerSyncPreviewReport report = preview(contract("200", "application/json", UPDATED_SCHEMA));
+        List<SwaggerSyncImpact> impacts = report.getImpacts();
 
+        assertEquals(5, report.getCheckedCount());
         assertEquals(4, impacts.size());
         assertTrue(impacts.stream().allMatch(impact -> impact.getFlowId() == 1
                 && impact.getNodeId() == 101L && "Valuation review".equals(impact.getFlowName())
@@ -102,32 +119,129 @@ class SwaggerSyncImpactServiceTest {
                 "RESPONSE_VARIABLE:reasons:$.data.records[*].reason",
                 "ASSERTION:201:$.data.decision",
                 "ASSERTION:202:$.data.records[0].reason")), references);
+        assertEquals(2, report.getUnassessed().size());
+        assertEquals(Reason.PATH_NOT_DECLARED, report.getUnassessed().get(0).getReason());
+        assertEquals(ContractVersion.CURRENT, report.getUnassessed().get(0).getContractVersion());
+        assertEquals(Reason.UNSUPPORTED_JSONPATH, report.getUnassessed().get(1).getReason());
+        assertEquals("$..decision", report.getUnassessed().get(1).getReference().getFieldPath());
     }
 
     @Test
-    void ignoresUnchangedFieldsAndResponsesThatCannotBeCompared() {
-        assertTrue(preview(contract("200", "application/json", SCHEMA)).isEmpty());
-        assertTrue(preview(contract("202", "application/json", UPDATED_SCHEMA)).isEmpty());
-        assertTrue(preview(contract("200", "application/problem+json", UPDATED_SCHEMA)).isEmpty());
-        assertTrue(preview(contract("200", "application/json",
-                "{\"$ref\":\"#/components/schemas/Missing\"}")).isEmpty());
-        assertTrue(preview(contract("200", "application/json",
-                "{\"anyOf\":[" + UPDATED_SCHEMA + "]}")).isEmpty());
+    void distinguishesCheckedAndUnchangedFromNoSavedReferences() {
+        String unchanged = contract("200", "application/json", SCHEMA);
+        SwaggerSyncPreviewReport report = preview(unchanged);
+        assertEquals(5, report.getCheckedCount());
+        assertTrue(report.getImpacts().isEmpty());
+        assertTrue(report.getUnassessed().isEmpty());
+
+        new JdbcTemplate(database).update("UPDATE brick_flow_node SET is_deleted = 1 WHERE id = 101");
+        report = preview(unchanged);
+        assertEquals(0, report.getCheckedCount());
+        assertTrue(report.getImpacts().isEmpty());
+        assertTrue(report.getUnassessed().isEmpty());
     }
 
-    private List<SwaggerSyncImpact> preview(String incoming) {
-        ParsedSwaggerDocument stored = parser.parse(contract("200", "application/json", SCHEMA), null, null);
+    @Test
+    void explainsMissingResponsesAndUnsupportedIncomingSchemas() {
+        assertUnassessed(preview(contract("202", "application/json", UPDATED_SCHEMA)),
+                Reason.RESPONSE_MISSING, ContractVersion.INCOMING);
+        assertUnassessed(preview(contract("200", "application/problem+json", UPDATED_SCHEMA)),
+                Reason.RESPONSE_MISSING, ContractVersion.INCOMING);
+        assertUnassessed(preview(contract("200", "application/json",
+                "{\"$ref\":\"#/components/schemas/Missing\"}")),
+                Reason.UNRESOLVED_SCHEMA, ContractVersion.INCOMING);
+        assertUnassessed(preview(contract("200", "application/json",
+                "{\"anyOf\":[" + UPDATED_SCHEMA + "]}")),
+                Reason.COMPOSED_SCHEMA, ContractVersion.INCOMING);
+        assertUnassessed(preview(contract("200", "application/json", UPDATED_SCHEMA)
+                .replace("{\"schema\":{\"$ref\":\"#/components/schemas/Assessment\"}}", "{}")),
+                Reason.SCHEMA_MISSING, ContractVersion.INCOMING);
+    }
+
+    @Test
+    void reportsComposedCurrentSchemaWithoutInferringFieldRemoval() {
+        String stored = contract("200", "application/json", "{\"allOf\":[" + SCHEMA + "]}");
+        assertUnassessed(preview(stored, contract("200", "application/json", UPDATED_SCHEMA)),
+                Reason.COMPOSED_SCHEMA, ContractVersion.CURRENT);
+    }
+
+    @Test
+    void canCompareOneResponseWhileAnotherResponseForTheSameReferenceIsUnassessed() {
+        JSONObject stored = JSON.parseObject(contract("200", "application/json", SCHEMA));
+        JSONObject responses = stored.getJSONObject("paths").getJSONObject("/assessment")
+                .getJSONObject("post").getJSONObject("responses");
+        responses.put("202", JSON.parseObject(responses.getJSONObject("200").toJSONString()));
+
+        SwaggerSyncPreviewReport report = preview(stored.toJSONString(),
+                contract("200", "application/json", UPDATED_SCHEMA));
+
+        assertEquals(5, report.getCheckedCount());
+        assertEquals(4, report.getImpacts().size());
+        assertEquals(5, report.getUnassessed().size());
+        assertTrue(report.getUnassessed().stream().allMatch(item -> item.getReason() == Reason.RESPONSE_MISSING
+                && "202".equals(item.getReference().getStatusCode())));
+    }
+
+    @Test
+    void servesLegacyArrayAndDetailedReportForTheSameRequest() throws Exception {
+        String incoming = contract("200", "application/json", "{\"allOf\":[" + UPDATED_SCHEMA + "]}");
+        JSONObject request = new JSONObject();
+        request.put("swaggerMappingId", 7);
+        request.put("swaggerContent", incoming);
+        try (SqlSession session = sessions.openSession()) {
+            IBrickApiService apiService = mock(IBrickApiService.class);
+            AppSwaggerMapping mapping = new AppSwaggerMapping();
+            mapping.setId(7);
+            when(apiService.getById(7)).thenReturn(mapping);
+            BrickController controller = new BrickController();
+            ReflectionTestUtils.setField(controller, "apiService", apiService);
+            ReflectionTestUtils.setField(controller, "swaggerSyncImpactService",
+                    service(contract("200", "application/json", SCHEMA), session));
+            MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+
+            mvc.perform(post("/brick/sync/preview").contentType(MediaType.APPLICATION_JSON)
+                            .content(request.toJSONString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data").isArray())
+                    .andExpect(jsonPath("$.data").isEmpty());
+            mvc.perform(post("/brick/sync/preview/report").contentType(MediaType.APPLICATION_JSON)
+                            .content(request.toJSONString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.checkedCount").value(0))
+                    .andExpect(jsonPath("$.data.impacts").isEmpty())
+                    .andExpect(jsonPath("$.data.unassessed[0].reason").value("COMPOSED_SCHEMA"))
+                    .andExpect(jsonPath("$.data.unassessed[0].reference.nodeId").value(101));
+        }
+    }
+
+    private void assertUnassessed(SwaggerSyncPreviewReport report, Reason reason, ContractVersion version) {
+        assertEquals(0, report.getCheckedCount());
+        assertTrue(report.getImpacts().isEmpty());
+        assertEquals(5, report.getUnassessed().size());
+        assertTrue(report.getUnassessed().stream().allMatch(item -> item.getReason() == reason
+                && item.getContractVersion() == version));
+    }
+
+    private SwaggerSyncPreviewReport preview(String incoming) {
+        return preview(contract("200", "application/json", SCHEMA), incoming);
+    }
+
+    private SwaggerSyncPreviewReport preview(String stored, String incoming) {
+        try (SqlSession session = sessions.openSession()) {
+            return service(stored, session).preview(7, incoming, null, null);
+        }
+    }
+
+    private SwaggerSyncImpactService service(String document, SqlSession session) {
+        ParsedSwaggerDocument stored = parser.parse(document, null, null);
         List<EndpointDefinition> endpoints = stored.getEndpoints();
         endpoints.get(0).setId(25);
         EndpointDefinitionMapper endpointMapper = mock(EndpointDefinitionMapper.class);
         EndpointSchemaMapper schemaMapper = mock(EndpointSchemaMapper.class);
         when(endpointMapper.selectAllBySwaggerMappingId(7, 0)).thenReturn(endpoints);
         when(schemaMapper.selectBySwaggerMappingId(7)).thenReturn(stored.getSchemas());
-        try (SqlSession session = sessions.openSession()) {
-            SwaggerSyncImpactService service = new SwaggerSyncImpactService(parser, endpointMapper,
-                    schemaMapper, session.getMapper(SwaggerSyncImpactMapper.class), new EndpointSchemaResolver());
-            return service.preview(7, incoming, null, null);
-        }
+        return new SwaggerSyncImpactService(parser, endpointMapper,
+                schemaMapper, session.getMapper(SwaggerSyncImpactMapper.class), new EndpointSchemaResolver());
     }
 
     private String contract(String status, String mediaType, String schema) {
