@@ -1,0 +1,55 @@
+# Copy to .github/workflows/brick-regression.yml in this backend checkout.
+# Configure BRICK_API_BASE_URL (complete /api/brick prefix) and optional
+# BRICK_WEB_BASE_URL as repository variables. If a gateway requires a bearer
+# token, configure BRICK_API_TOKEN as a repository/environment secret.
+# The runner must be able to reach Brick, and Brick must reach the test target.
+name: Brick regression
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite_id:
+        description: Saved Brick test suite ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Run saved Brick regression suite
+        env:
+          SUITE_ID: ${{ inputs.suite_id }}
+          BRICK_API_BASE_URL: ${{ vars.BRICK_API_BASE_URL }}
+          BRICK_WEB_BASE_URL: ${{ vars.BRICK_WEB_BASE_URL }}
+          BRICK_API_TOKEN: ${{ secrets.BRICK_API_TOKEN }}
+        shell: bash
+        run: |
+          options=()
+          if [ -n "$BRICK_WEB_BASE_URL" ]; then
+            options+=(--web-base-url "$BRICK_WEB_BASE_URL")
+          fi
+          python3 scripts/brick_run.py \
+            --suite-id "$SUITE_ID" \
+            --operator github-actions \
+            --timeout 900 \
+            --report-dir brick-reports \
+            "${options[@]}"
+
+      - name: Retain reports even when regression fails
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: brick-regression-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            brick-reports/results.xml
+            brick-reports/summary.json
+          if-no-files-found: error

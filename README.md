@@ -66,6 +66,7 @@ The companion frontend provides the visual contract-to-execution workflow. Its [
 - Status-code, JSONPath, response-header, and response-time assertions
 - Immutable node and assertion snapshots for each execution
 - Run history, failed-flow reruns, test-suite orchestration, and node-level request/response diagnostics
+- A CI command-line runner for saved flows and test suites, with assertion-aware release gates, JUnit reports, and JSON summaries
 - Consistent JSON errors, request validation, and end-to-end `X-Request-ID` correlation
 
 ### Reproducible demonstration
@@ -243,17 +244,55 @@ The main API is served from `http://localhost:8080/api/brick`.
 
 Spring Boot does not automatically load the Compose `.env` file. Export the database variables in the shell used to start Maven. The native default is MySQL port `3306`; the database published by Compose defaults to `3307`, so set `DB_URL` accordingly when mixing a native backend with a Docker database. A complete command sequence is in the [development guide](docs/development.md#native-development-with-a-docker-database).
 
+## Run saved tests in CI
+
+Use Python 3.9 or later; no Python packages need to be installed. The command runs tests already saved in Brick. Endpoint addresses, variables, headers, and assertions continue to come from those saved definitions.
+
+```bash
+python3 scripts/brick_run.py \
+  --base-url http://localhost:8080/api/brick \
+  --suite-id 12 \
+  --operator ci \
+  --web-base-url http://localhost:3000 \
+  --timeout 900 \
+  --report-dir brick-reports
+```
+
+Replace the suite ID with your saved suite's ID. To run a single flow, use `--flow-id 7` instead of `--suite-id 12`. `--base-url` is the complete backend API prefix; it can also be supplied through `BRICK_API_BASE_URL`. The optional `--web-base-url` is the frontend address used to link each flow to its execution history.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | Every flow satisfies the selected gate policy. |
+| `1` | A request failed, a node was blocked, an assertion failed, or a flow had no assertions under the default policy. |
+| `2` | Verification could not be completed reliably: invalid configuration, API/network failure, timeout, missing records, or unevaluated assertions. |
+
+Every flow must execute successfully and pass its configured assertions. Helper nodes may have no assertions, but an entire flow without assertions fails the default gate. For intentional connectivity checks, `--allow-no-assertions` permits these flows while marking them **skipped** in JUnit and `no_assertions_allowed` in JSON. This option never bypasses a failed or unevaluated assertion. A suite is checked flow by flow, so its aggregate business status cannot hide an unverified child.
+
+The report directory contains:
+
+- `results.xml`: JUnit XML with one test case per flow, plus runner errors when the result set is incomplete. CI tools can ingest this file through their JUnit integration.
+- `summary.json`: the gate verdict, exit code, target and run IDs, policy, flow outcomes, failed node/assertion snapshot IDs, and optional Brick links.
+
+Reports exclude request/response payloads, assertion values, and credentials. Open the linked Brick run for full diagnostics. If a gateway in front of Brick requires bearer authentication, supply `BRICK_API_TOKEN` through your CI secret environment; the runner does not add an identity system to Brick.
+
+The timeout covers the complete API exchange and result collection. Execution requests are sent once and are never automatically retried. A timed-out request may still be running in Brick; the runner does not cancel it. Known running IDs are polled without starting another execution. Use a separate report directory for each concurrent invocation.
+
+A [GitHub Actions example](examples/ci/github-actions.yml) runs a selected saved suite and retains both reports even on failure using [GitHub's artifact action](https://github.com/actions/upload-artifact). Copy it into `.github/workflows/` and configure the service addresses. The CI worker must be able to reach Brick, and Brick must be able to reach the configured application under test; use a worker on the appropriate network for private services. This example can be used after a deployment step in your release workflow.
+
 ## Testing and CI
 
 ```bash
 mvn test
+python3 -m unittest discover -s scripts/tests -v
 ```
 
 The automated suite covers contract parsing, recursive schema resolution, variable extraction and binding, global functions, read-only database variables, HTTP execution, branching, assertions, flow copying, execution snapshots, test-suite orchestration, mapper SQL, API metadata, and request correlation.
 
 Tests use mocks, H2, and a temporary loopback HTTP server; they do not require a running MySQL instance. The HTTP tests need permission to bind a local ephemeral port. On 2026-11-04, all 72 tests passed with JDK 8. This is a dated local baseline, not an end-to-end UI or Docker verification.
 
-GitHub Actions runs Maven verification and builds the production container image on pushes to `main` and pull requests.
+The Python tests exercise the actual command against a temporary local API fixture: flow/suite gates, business failures, missing snapshots, report contents, timeouts, and prevention of duplicate execution requests. They need a local ephemeral port and do not require a database or running Brick instance.
+
+GitHub Actions runs Maven verification, checks the CI runner, and builds the production container image on pushes to `main` and pull requests.
 
 ## Request tracing
 
@@ -281,6 +320,8 @@ src/main/resources/
   mapper/       MyBatis XML statements
   schema.sql    complete MySQL schema
 examples/       demonstration OpenAPI document
+  ci/           pipeline integration example
+scripts/        dependency-free CI regression runner and its tests
 docs/           development guide and frontend/backend save contract
 ```
 

@@ -46,8 +46,16 @@ build/
 .env.*.local
 !.env.example
 
-### Local project notes; keep maintained guides in version control ###
+### Local project notes ###
 /docs/*
-!/docs/development.md
-!/docs/flow-save-frontend-contract.md
-!/docs/openapi-impact-preview-requirements.md
+
+### Keep Markdown local, except README files ###
+*.[mM][dD]
+![rR][eE][aA][dD][mM][eE].[mM][dD]
+
+# Add exact exceptions below only for Markdown required at runtime.
+
+### Local CI reports and Python cache ###
+/brick-reports/
+__pycache__/
+*.pyc

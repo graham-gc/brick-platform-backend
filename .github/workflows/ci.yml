@@ -25,5 +25,8 @@ jobs:
       - name: Verify backend
         run: mvn --batch-mode --no-transfer-progress verify
 
+      - name: Verify CI regression runner
+        run: python3 -m unittest discover -s scripts/tests -v
+
       - name: Build container image
         run: docker build --tag brick-platform-backend:ci .
